@@ -11,6 +11,9 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
 
+    /* 忽略 TypeScript 6.0 弃用警告（baseUrl 在 TS7.0 中会移除） */
+    "ignoreDeprecations": "6.0",
+
     /* 路径别名配置 */
     // 基础路径，用于解析非相对模块名
     "baseUrl": ".",
