@@ -2,18 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo } from '@/types/todo'
 import { getTodos, saveTodos, addTodo as storageAddTodo } from '@/utils/storage'
-
-/**
- * 获取今天的日期字符串（格式: YYYY-MM-DD）
- * @returns 日期字符串
- */
-function today(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+import { getTodayDate } from '@/utils/date'
 
 /**
  * 待办事项状态管理 Store
@@ -71,11 +60,15 @@ export const useTodoStore = defineStore('todo', () => {
   // ========== 计算属性 ==========
 
   /**
+   * 今日日期
+   */
+  const today = computed<string>(() => getTodayDate())
+
+  /**
    * 今日待办列表
    */
   const todayTodos = computed<Todo[]>(() => {
-    const t = today()
-    return todos.value.filter(todo => todo.date === t)
+    return getTodosByDate(today.value)
   })
 
   /**
@@ -94,22 +87,89 @@ export const useTodoStore = defineStore('todo', () => {
    * 今日完成进度百分比 (0-100)
    */
   const todayProgress = computed<number>(() => {
-    if (todayTotalCount.value === 0) return 0
-    return Math.round((todayDoneCount.value / todayTotalCount.value) * 100)
+    return getDateProgress(today.value)
   })
+
+  // ========== 方法：支持任意日期 ==========
+
+  /**
+   * 获取指定日期的待办列表
+   * @param date - 日期字符串 'YYYY-MM-DD'
+   * @returns 待办数组
+   */
+  function getTodosByDate(date: string): Todo[] {
+    return todos.value.filter(todo => todo.date === date)
+  }
+
+  /**
+   * 获取指定日期的已完成数量
+   * @param date - 日期字符串
+   * @returns 已完成数量
+   */
+  function getDateDoneCount(date: string): number {
+    return getTodosByDate(date).filter(t => t.done).length
+  }
+
+  /**
+   * 获取指定日期的待办总数
+   * @param date - 日期字符串
+   * @returns 待办总数
+   */
+  function getDateTotalCount(date: string): number {
+    return getTodosByDate(date).length
+  }
+
+  /**
+   * 获取指定日期的完成进度百分比 (0-100)
+   * @param date - 日期字符串
+   * @returns 进度百分比
+   */
+  function getDateProgress(date: string): number {
+    const total = getDateTotalCount(date)
+    if (total === 0) return 0
+    const done = getDateDoneCount(date)
+    return Math.round((done / total) * 100)
+  }
+
+  /**
+   * 获取所有有任务的日期列表（倒序排列，最新的在前）
+   * @returns 日期字符串数组
+   */
+  const datesWithTodos = computed<string[]>(() => {
+    const dateSet = new Set<string>()
+    todos.value.forEach(todo => {
+      dateSet.add(todo.date)
+    })
+    // 倒序排列：最新日期在前
+    return Array.from(dateSet).sort((a, b) => b.localeCompare(a))
+  })
+
+  /**
+   * 获取所有有任务的日期数量
+   */
+  const datesWithTodosCount = computed<number>(() => datesWithTodos.value.length)
 
   return {
     // 状态
     todos,
-    // 计算属性
+    // 计算属性（今日快捷访问）
+    today,
     todayTodos,
     todayDoneCount,
     todayTotalCount,
     todayProgress,
+    // 计算属性（手账用）
+    datesWithTodos,
+    datesWithTodosCount,
     // 方法
     loadTodos,
     addTodo,
     toggleTodo,
     deleteTodo,
+    // 方法（支持任意日期）
+    getTodosByDate,
+    getDateDoneCount,
+    getDateTotalCount,
+    getDateProgress,
   }
 })
