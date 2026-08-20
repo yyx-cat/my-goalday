@@ -5,6 +5,7 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  base: '/my-goalday/',
   resolve: {
     alias: {
       // 配置 @ 路径别名，指向 src 目录
