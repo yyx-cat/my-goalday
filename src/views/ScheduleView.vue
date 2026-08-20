@@ -1,119 +1,198 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
-import { getTodayDate, addDays, formatChineseDate } from '@/utils/date'
+import {
+  getTodayDate,
+  addDays,
+  formatChineseDate,
+  parseDate,
+  getWeekDay,
+  getWeekDates,
+  getMondayOfWeek,
+  getWeekNumber,
+  getWeekRangeText,
+} from '@/utils/date'
+import type { Todo } from '@/types/todo'
 
 const todoStore = useTodoStore()
 
-// 当前选中的日期（YYYY-MM-DD 格式）
-const currentDate = ref<string>(getTodayDate())
-
-// 新任务输入框内容
-const newTaskText = ref<string>('')
-
-// 滑动手势相关变量
-let touchStartX = 0
-const SWIPE_THRESHOLD = 50 // 滑动触发阈值（像素）
+/**
+ * 单个日期卡片的数据结构
+ */
+interface DayCard {
+  /** 日期字符串 YYYY-MM-DD */
+  date: string
+  /** 中文展示文本（如 2026年8月20日 · 星期四） */
+  dateDisplay: string
+  /** 星期几 */
+  weekday: string
+  /** 短日期展示（如 8月20日） */
+  shortDate: string
+  /** 该天的任务列表 */
+  todos: Todo[]
+  /** 卡片内输入框文本 */
+  newTodoText: string
+  /** 是否是今天 */
+  isToday: boolean
+}
 
 /**
- * 页面过渡动画方向：'left' 右滑到下一天，'right' 左滑到上一天
+ * 当前所在周的"锚定日期"（用任意一天即可定位整周）
+ * 默认为今天，切换周时更新此值
  */
-const slideDirection = ref<'left' | 'right'>('left')
+const currentAnchor = ref<string>(getTodayDate())
+
+/**
+ * 每个日期的输入框文本（独立存储，便于就地编辑）
+ * key: date, value: 输入文本
+ */
+const inputTextMap = ref<Record<string, string>>({})
+
+/**
+ * 滑动手势相关变量
+ */
+let touchStartX = 0
+let touchStartY = 0
+let touchStartTime = 0
+const SWIPE_THRESHOLD = 50 // 滑动触发阈值（像素）
+const SWIPE_TIME_LIMIT = 500 // 滑动时间限制（毫秒）
+
+/**
+ * 翻页动画方向与状态
+ */
+const slideDirection = ref<'up' | 'down'>('up')
 const isAnimating = ref<boolean>(false)
 
 // ========== 计算属性 ==========
 
 /**
- * 当前日期的中文显示（如：2026年8月18日 · 星期二）
+ * 当前周的 7 天日期数组（周一到周日，正序）
  */
-const dateDisplay = computed<string>(() => {
-  return formatChineseDate(currentDate.value)
+const currentWeekDates = computed<string[]>(() => {
+  return getWeekDates(currentAnchor.value)
 })
 
 /**
- * 是否是今天
+ * 当前周的周一日期
  */
-const isToday = computed<boolean>(() => currentDate.value === getTodayDate())
-
-/**
- * 当前日期的任务列表
- */
-const currentTodos = computed(() => {
-  return todoStore.getTodosByDate(currentDate.value)
+const currentMonday = computed<string>(() => {
+  return getMondayOfWeek(currentAnchor.value)
 })
 
 /**
- * 当前日期的已完成数量
+ * 当前周是今年的第几周
  */
-const doneCount = computed<number>(() => {
-  return todoStore.getDateDoneCount(currentDate.value)
+const currentWeekNumber = computed<number>(() => {
+  return getWeekNumber(currentAnchor.value)
 })
 
 /**
- * 当前日期的任务总数
+ * 当前周的年份
  */
-const totalCount = computed<number>(() => {
-  return todoStore.getDateTotalCount(currentDate.value)
+const currentYear = computed<number>(() => {
+  return parseDate(currentMonday.value).getFullYear()
 })
 
 /**
- * 当前日期的完成进度
+ * 当前周的日期范围文本（如 "8月17日 - 8月23日"）
  */
-const progress = computed<number>(() => {
-  return todoStore.getDateProgress(currentDate.value)
+const weekRangeText = computed<string>(() => {
+  return getWeekRangeText(currentAnchor.value)
+})
+
+/**
+ * 是否是本周（今天所在的周）
+ */
+const isCurrentWeek = computed<boolean>(() => {
+  return getMondayOfWeek(currentAnchor.value) === getMondayOfWeek(getTodayDate())
+})
+
+/**
+ * 当前周的 7 天卡片数据
+ */
+const dayCards = computed<DayCard[]>(() => {
+  const dates = currentWeekDates.value
+  const allTodos = todoStore.todos
+  const today = getTodayDate()
+
+  return dates.map(date => {
+    const dateObj = parseDate(date)
+    return {
+      date,
+      dateDisplay: formatChineseDate(date),
+      weekday: getWeekDay(dateObj),
+      shortDate: `${dateObj.getMonth() + 1}月${dateObj.getDate()}日`,
+      todos: allTodos.filter(t => t.date === date),
+      newTodoText: inputTextMap.value[date] || '',
+      isToday: date === today,
+    }
+  })
 })
 
 // ========== 方法 ==========
 
 /**
- * 切换到上一天
+ * 切换到上一周（更早的日期）
  */
-function goPrevDay(): void {
+function goPrevWeek(): void {
   if (isAnimating.value) return
-  slideDirection.value = 'right'
+  slideDirection.value = 'down'
   isAnimating.value = true
-  currentDate.value = addDays(currentDate.value, -1)
+  // 往前推 7 天
+  currentAnchor.value = addDays(currentAnchor.value, -7)
   setTimeout(() => {
     isAnimating.value = false
   }, 300)
 }
 
 /**
- * 切换到下一天
+ * 切换到下一周（更晚的日期）
  */
-function goNextDay(): void {
+function goNextWeek(): void {
   if (isAnimating.value) return
-  slideDirection.value = 'left'
+  slideDirection.value = 'up'
   isAnimating.value = true
-  currentDate.value = addDays(currentDate.value, 1)
+  // 往后推 7 天
+  currentAnchor.value = addDays(currentAnchor.value, 7)
   setTimeout(() => {
     isAnimating.value = false
   }, 300)
 }
 
 /**
- * 回到今天
+ * 回到本周（今天所在的周）
  */
-function goToday(): void {
-  if (isToday.value) return
-  // 如果切换方向不明，默认从左滑入
-  const today = getTodayDate()
-  slideDirection.value = today > currentDate.value ? 'left' : 'right'
+function goThisWeek(): void {
+  if (isCurrentWeek.value) return
+  const thisWeekMonday = getMondayOfWeek(getTodayDate())
+  // 根据当前周与本周的相对位置决定动画方向
+  slideDirection.value = thisWeekMonday > currentMonday.value ? 'up' : 'down'
   isAnimating.value = true
-  currentDate.value = today
+  currentAnchor.value = getTodayDate()
   setTimeout(() => {
     isAnimating.value = false
   }, 300)
 }
 
 /**
- * 添加任务
+ * 设置某个日期的输入框文本
+ * @param date - 日期字符串
+ * @param text - 输入文本
  */
-function handleAddTask(): void {
-  const text = newTaskText.value.trim()
+function setInputText(date: string, text: string): void {
+  inputTextMap.value[date] = text
+}
+
+/**
+ * 在某个日期卡片内添加任务
+ * @param date - 日期字符串
+ */
+function handleAddTodo(date: string): void {
+  const text = (inputTextMap.value[date] || '').trim()
   if (!text) return
-  todoStore.addTodo(text, currentDate.value)
-  newTaskText.value = ''
+  todoStore.addTodo(text, date)
+  // 清空输入框
+  inputTextMap.value[date] = ''
 }
 
 /**
@@ -132,7 +211,7 @@ function handleDeleteTodo(id: string): void {
   todoStore.deleteTodo(id)
 }
 
-// ========== 手势滑动处理 ==========
+// ========== 滑动手势处理 ==========
 
 /**
  * 触摸开始
@@ -140,23 +219,35 @@ function handleDeleteTodo(id: string): void {
  */
 function handleTouchStart(e: TouchEvent): void {
   touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+  touchStartTime = Date.now()
 }
 
 /**
- * 触摸结束
+ * 触摸结束，判断滑动方向
+ * 主要检测纵向滑动（上下切换周）
  * @param e - 触摸事件
  */
 function handleTouchEnd(e: TouchEvent): void {
   const touchEndX = e.changedTouches[0].clientX
-  const diff = touchStartX - touchEndX
+  const touchEndY = e.changedTouches[0].clientY
+  const diffX = touchStartX - touchEndX
+  const diffY = touchStartY - touchEndY
+  const duration = Date.now() - touchStartTime
 
-  // 左滑（手指向左移动）→ 切换到下一天
-  if (diff > SWIPE_THRESHOLD) {
-    goNextDay()
-  }
-  // 右滑（手指向右移动）→ 切换到上一天
-  else if (diff < -SWIPE_THRESHOLD) {
-    goPrevDay()
+  // 超过时间限制则不触发
+  if (duration > SWIPE_TIME_LIMIT) return
+
+  // 优先判断纵向滑动（上下切换周）
+  if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > SWIPE_THRESHOLD) {
+    // 手指向上滑（diffY > 0）→ 切换到下一周（更晚的日期）
+    if (diffY > 0) {
+      goNextWeek()
+    }
+    // 手指向下滑（diffY < 0）→ 切换到上一周（更早的日期）
+    else {
+      goPrevWeek()
+    }
   }
 }
 
@@ -168,92 +259,112 @@ onMounted(() => {
 
 <template>
   <div class="schedule-view">
-    <!-- 任务 2.1：日期导航栏 -->
-    <header class="date-nav">
-      <button class="nav-btn" @click="goPrevDay" :disabled="isAnimating">‹</button>
-      <div class="date-center">
-        <p class="date-text">{{ dateDisplay }}</p>
-        <button
-          v-if="!isToday"
-          class="today-btn"
-          @click="goToday"
-        >今天</button>
-      </div>
-      <button class="nav-btn" @click="goNextDay" :disabled="isAnimating">›</button>
+    <!-- 顶部标题栏 -->
+    <header class="top-bar">
+      <h1 class="title">📅 日程</h1>
+      <button
+        v-if="!isCurrentWeek"
+        class="today-btn"
+        @click="goThisWeek"
+      >本周</button>
     </header>
 
-    <!-- 任务列表区域（支持手势滑动） -->
+    <!-- 周导航栏 -->
+    <div class="week-nav">
+      <button
+        class="week-nav-btn"
+        @click="goPrevWeek"
+        :disabled="isAnimating"
+      >‹</button>
+
+      <div class="week-center">
+        <p class="week-number">{{ currentYear }}年 第 {{ currentWeekNumber }} 周</p>
+        <p class="week-range">{{ weekRangeText }}</p>
+      </div>
+
+      <button
+        class="week-nav-btn"
+        @click="goNextWeek"
+        :disabled="isAnimating"
+      >›</button>
+    </div>
+
+    <!-- 一周的日期卡片区域（支持上下滑动切换周） -->
     <div
-      class="task-list-area"
-      @touchstart="handleTouchStart"
-      @touchend="handleTouchEnd"
+      class="week-container"
+      @touchstart.passive="handleTouchStart"
+      @touchend.passive="handleTouchEnd"
     >
-      <!-- 页面过渡动画容器 -->
+      <!-- 翻页动画容器 -->
       <div
-        class="task-list-container"
+        class="week-content"
         :class="[isAnimating ? `slide-${slideDirection}` : '']"
       >
-        <!-- 任务列表 -->
-        <div class="task-list">
-          <div
-            v-for="todo in currentTodos"
-            :key="todo.id"
-            class="task-card"
-            :class="{ completed: todo.done }"
-          >
-            <!-- 复选框 -->
-            <button class="check-btn" @click="handleToggleTodo(todo.id)">
-              {{ todo.done ? '☑' : '☐' }}
-            </button>
-
-            <!-- 任务文字 -->
-            <span class="task-text">{{ todo.text }}</span>
-
-            <!-- 删除按钮 -->
-            <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
+        <div
+          v-for="card in dayCards"
+          :key="card.date"
+          class="day-card"
+          :class="{ today: card.isToday }"
+        >
+          <!-- 日期标题 -->
+          <div class="day-header">
+            <div class="day-info">
+              <span class="day-short">{{ card.shortDate }}</span>
+              <span class="day-weekday">{{ card.weekday }}</span>
+            </div>
+            <span v-if="card.isToday" class="today-tag">今天</span>
+            <span v-else-if="card.todos.length > 0" class="count-tag">
+              {{ card.todos.filter(t => t.done).length }}/{{ card.todos.length }}
+            </span>
           </div>
 
-          <!-- 空状态提示 -->
-          <div v-if="totalCount === 0" class="empty-tip">
-            <p>✨ 今天还没有待办，写一件小目标吧~</p>
+          <!-- 任务列表 -->
+          <div class="todo-list">
+            <div
+              v-for="todo in card.todos"
+              :key="todo.id"
+              class="todo-item"
+              :class="{ completed: todo.done }"
+            >
+              <button class="check-btn" @click="handleToggleTodo(todo.id)">
+                {{ todo.done ? '☑' : '☐' }}
+              </button>
+              <span class="todo-text">{{ todo.text }}</span>
+              <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
+            </div>
+
+            <!-- 空状态提示 -->
+            <div v-if="card.todos.length === 0" class="empty-tip">
+              ✨ 这天还没有待办
+            </div>
+          </div>
+
+          <!-- 卡片内就地输入框 -->
+          <div class="inline-input-area">
+            <input
+              :value="card.newTodoText"
+              @input="setInputText(card.date, ($event.target as HTMLInputElement).value)"
+              @keyup.enter="handleAddTodo(card.date)"
+              placeholder="✍️ 写待办..."
+              class="inline-input"
+            />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 底部区域：进度 + 添加任务 -->
-    <footer class="bottom-area">
-      <!-- 进度显示 -->
-      <div class="progress-section">
-        <div class="progress-text">
-          <span>已完成 {{ doneCount }}/{{ totalCount }}</span>
-        </div>
-        <div class="progress-bar">
-          <div
-            class="progress-fill"
-            :style="{ width: progress + '%' }"
-          ></div>
-        </div>
-      </div>
-
-      <!-- 添加任务输入框 -->
-      <div class="add-task-area">
-        <input
-          v-model="newTaskText"
-          placeholder="✍️ 写下一件事..."
-          class="task-input"
-          @keyup.enter="handleAddTask"
-        />
-        <button class="add-btn" @click="handleAddTask">+</button>
-      </div>
-    </footer>
+    <!-- 底部提示 -->
+    <div class="bottom-hint">
+      <span>↑ 下滑下一周 · ↓ 上滑上一周</span>
+    </div>
   </div>
 </template>
 
 <style scoped>
 /* ========== 页面整体 ========== */
 .schedule-view {
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   width: 100%;
   background: #FAF8F5;
   display: flex;
@@ -261,25 +372,62 @@ onMounted(() => {
   overflow: hidden;
 }
 
-/* ========== 日期导航栏 ========== */
-.date-nav {
+/* ========== 顶部标题栏 ========== */
+.top-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 16px;
+  padding: 14px 20px;
   background: #FDF8F0;
   border-bottom: 1px solid #F0E8D8;
   flex-shrink: 0;
 }
 
-.nav-btn {
-  width: 36px;
-  height: 36px;
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #5E4F3D;
+  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  letter-spacing: 1px;
+}
+
+.today-btn {
+  padding: 5px 14px;
+  border: 1px solid #C4A375;
+  border-radius: 12px;
+  background: transparent;
+  color: #8B6539;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  transition: all 0.2s;
+}
+
+.today-btn:hover {
+  background: #EFE4D4;
+  border-color: #A8824F;
+}
+
+/* ========== 周导航栏 ========== */
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #FDF8F0;
+  border-bottom: 1px solid #F0E8D8;
+  flex-shrink: 0;
+}
+
+.week-nav-btn {
+  width: 32px;
+  height: 32px;
   border: 1.5px solid #E8DFD3;
   border-radius: 50%;
   background: #FFFEF9;
   color: #8B6539;
-  font-size: 20px;
+  font-size: 18px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -289,194 +437,258 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.nav-btn:hover:not(:disabled) {
+.week-nav-btn:hover:not(:disabled) {
   border-color: #C4A375;
   background: #FAF8F5;
   transform: scale(1.05);
 }
 
-.nav-btn:disabled {
-  opacity: 0.5;
+.week-nav-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.date-center {
+.week-center {
   text-align: center;
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.date-text {
+.week-number {
   margin: 0;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   color: #5E4F3D;
   font-family: 'LXGW WenKai', '霞鹜文楷', serif;
   letter-spacing: 0.5px;
 }
 
-.today-btn {
-  padding: 2px 10px;
-  border: 1px solid #C4A375;
-  border-radius: 12px;
-  background: transparent;
-  color: #8B6539;
+.week-range {
+  margin: 0;
   font-size: 11px;
-  cursor: pointer;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  transition: background 0.2s;
+  color: #9C876C;
+  font-family: 'Noto Serif SC', '思源宋体', serif;
 }
 
-.today-btn:hover {
-  background: #EFE4D4;
-}
-
-/* ========== 任务列表区域 ========== */
-.task-list-area {
+/* ========== 周内容区域 ========== */
+.week-container {
   flex: 1;
-  overflow: hidden;
-  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  /* iOS 动量滚动 */
+  -webkit-overflow-scrolling: touch;
+  /* 禁止页面滚动反弹干扰手势 */
+  overscroll-behavior: contain;
 }
 
-.task-list-container {
-  width: 100%;
-  height: 100%;
-  padding: 12px 16px;
-  overflow-y: auto;
+.week-content {
+  padding: 12px 16px 20px;
   transition: transform 0.3s ease-out, opacity 0.3s ease-out;
 }
 
-/* 滑动过渡动画 */
-.slide-left {
-  animation: slideOutLeft 0.3s ease-out, slideInRight 0.3s ease-out 0.15s;
+/* 翻页过渡动画 */
+.slide-up {
+  animation: slideOutUp 0.3s ease-out, slideInFromBottom 0.3s ease-out 0.15s;
 }
 
-.slide-right {
-  animation: slideOutRight 0.3s ease-out, slideInLeft 0.3s ease-out 0.15s;
+.slide-down {
+  animation: slideOutDown 0.3s ease-out, slideInFromTop 0.3s ease-out 0.15s;
 }
 
-@keyframes slideOutLeft {
-  0% { transform: translateX(0); opacity: 1; }
-  100% { transform: translateX(-30px); opacity: 0.3; }
+@keyframes slideOutUp {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-30px); opacity: 0.3; }
 }
 
-@keyframes slideInRight {
-  0% { transform: translateX(30px); opacity: 0.3; }
-  100% { transform: translateX(0); opacity: 1; }
+@keyframes slideInFromBottom {
+  0% { transform: translateY(30px); opacity: 0.3; }
+  100% { transform: translateY(0); opacity: 1; }
 }
 
-@keyframes slideOutRight {
-  0% { transform: translateX(0); opacity: 1; }
-  100% { transform: translateX(30px); opacity: 0.3; }
+@keyframes slideOutDown {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(30px); opacity: 0.3; }
 }
 
-@keyframes slideInLeft {
-  0% { transform: translateX(-30px); opacity: 0.3; }
-  100% { transform: translateX(0); opacity: 1; }
+@keyframes slideInFromTop {
+  0% { transform: translateY(-30px); opacity: 0.3; }
+  100% { transform: translateY(0); opacity: 1; }
 }
 
-/* 任务列表滚动条 */
-.task-list-container::-webkit-scrollbar {
+/* 滚动条样式 */
+.week-container::-webkit-scrollbar {
   width: 4px;
 }
 
-.task-list-container::-webkit-scrollbar-thumb {
+.week-container::-webkit-scrollbar-thumb {
   background: #D4C5B0;
   border-radius: 10px;
 }
 
-.task-list-container::-webkit-scrollbar-track {
+.week-container::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* 任务卡片列表 */
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* 任务卡片 */
-.task-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+/* ========== 单个日期卡片 ========== */
+.day-card {
   background: #FDF8F0;
   border-radius: 10px;
   border: 1px solid #F0E8D8;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.04),
-    0 2px 8px rgba(0, 0, 0, 0.03);
+    0 2px 6px rgba(0, 0, 0, 0.03);
+  margin-bottom: 10px;
+  overflow: hidden;
   transition: all 0.2s;
 }
 
-.task-card:hover {
-  transform: translateY(-1px);
+.day-card:hover {
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.06),
-    0 4px 12px rgba(0, 0, 0, 0.05);
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    0 3px 10px rgba(0, 0, 0, 0.04);
 }
 
-.task-card.completed {
+/* 今天的卡片高亮 */
+.day-card.today {
+  border-color: #C4A375;
+  background: #FFFEF5;
+  box-shadow:
+    0 2px 8px rgba(196, 163, 117, 0.2),
+    0 3px 12px rgba(196, 163, 117, 0.1);
+}
+
+/* ========== 日期标题 ========== */
+.day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #FFFEF9;
+  border-bottom: 1px dashed #F0E8D8;
+}
+
+.day-card.today .day-header {
+  background: #FBF6E8;
+}
+
+.day-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.day-short {
+  font-size: 14px;
+  font-weight: 600;
+  color: #5E4F3D;
+  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+}
+
+.day-weekday {
+  font-size: 12px;
+  color: #9C876C;
+  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+}
+
+.today-tag {
+  padding: 2px 10px;
+  background: #A8824F;
+  color: #FFF9F0;
+  font-size: 11px;
+  border-radius: 10px;
+  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+}
+
+.count-tag {
+  padding: 2px 8px;
+  background: #EFE4D4;
+  color: #8B6539;
+  font-size: 11px;
+  border-radius: 10px;
+  font-family: 'Noto Serif SC', '思源宋体', serif;
+}
+
+/* ========== 任务列表 ========== */
+.todo-list {
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: #FFFEF9;
+  border-radius: 7px;
+  border: 1px solid #F5EFE3;
+  transition: all 0.2s;
+}
+
+.todo-item:hover {
+  background: #FDF8F0;
+  border-color: #EFE4D4;
+}
+
+.todo-item.completed {
+  opacity: 0.6;
   background: #FAF8F5;
-  border-color: #E8DFD3;
-  opacity: 0.75;
 }
 
 /* 复选框 */
 .check-btn {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border: none;
   background: transparent;
-  font-size: 22px;
+  font-size: 17px;
   color: #9C876C;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: color 0.2s, transform 0.1s;
+  transition: all 0.2s;
   padding: 0;
 }
 
 .check-btn:hover {
   color: #8B6539;
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 
-.task-card.completed .check-btn {
+.todo-item.completed .check-btn {
   color: #A8824F;
 }
 
 /* 任务文字 */
-.task-text {
+.todo-text {
   flex: 1;
-  font-size: 15px;
+  font-size: 13px;
   color: #5E4F3D;
   font-family: 'LXGW WenKai', '霞鹜文楷', serif;
   word-break: break-word;
   line-height: 1.5;
 }
 
-.task-card.completed .task-text {
+.todo-item.completed .todo-text {
   text-decoration: line-through;
   color: #B8A68E;
 }
 
 /* 删除按钮 */
 .delete-btn {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border: none;
   background: transparent;
-  color: #B8A68E;
-  font-size: 16px;
+  color: #C8B8A0;
+  font-size: 13px;
   cursor: pointer;
   border-radius: 50%;
   display: flex;
@@ -485,6 +697,11 @@ onMounted(() => {
   flex-shrink: 0;
   transition: all 0.2s;
   padding: 0;
+  opacity: 0;
+}
+
+.todo-item:hover .delete-btn {
+  opacity: 1;
 }
 
 .delete-btn:hover {
@@ -495,133 +712,95 @@ onMounted(() => {
 /* 空状态提示 */
 .empty-tip {
   text-align: center;
-  padding: 40px 20px;
-  color: #B8A68E;
+  padding: 8px 6px;
+  color: #C8B8A0;
   font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  font-size: 14px;
+  font-size: 11px;
 }
 
-.empty-tip p {
-  margin: 0;
+/* ========== 就地输入框 ========== */
+.inline-input-area {
+  padding: 6px 10px 10px;
+  border-top: 1px dashed #F5EFE3;
 }
 
-/* ========== 底部区域 ========== */
-.bottom-area {
-  flex-shrink: 0;
-  background: #FDF8F0;
-  border-top: 1px solid #F0E8D8;
-  padding: 12px 16px;
-}
-
-/* 进度显示 */
-.progress-section {
-  margin-bottom: 12px;
-}
-
-.progress-text {
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: #7D6A52;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
-}
-
-.progress-bar {
+.inline-input {
   width: 100%;
-  height: 6px;
-  background: #F5F0EA;
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  min-width: 0;
-  background: linear-gradient(90deg, #C4A375, #A8824F);
-  border-radius: 999px;
-  transition: width 0.35s ease;
-}
-
-/* 添加任务区 */
-.add-task-area {
-  display: flex;
-  gap: 10px;
-}
-
-.task-input {
-  flex: 1;
-  padding: 10px 14px;
-  border: 1.5px solid #E8DFD3;
-  border-radius: 10px;
+  padding: 7px 10px;
+  border: 1.5px dashed #E8DFD3;
+  border-radius: 7px;
   background: #FFFEF9;
-  font-size: 15px;
+  font-size: 13px;
   font-family: 'LXGW WenKai', '霞鹜文楷', serif;
   color: #5E4F3D;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s;
+  box-sizing: border-box;
 }
 
-.task-input::placeholder {
-  color: #B8A68E;
+.inline-input::placeholder {
+  color: #C8B8A0;
+  font-style: italic;
 }
 
-.task-input:focus {
+.inline-input:focus {
   border-color: #C4A375;
-  box-shadow: 0 0 0 3px rgba(196, 163, 117, 0.15);
+  border-style: solid;
+  background: #FFF;
+  box-shadow: 0 0 0 3px rgba(196, 163, 117, 0.12);
 }
 
-.add-btn {
-  width: 44px;
-  height: 44px;
-  border: none;
-  border-radius: 10px;
-  background: #A8824F;
-  color: #FFF9F0;
-  font-size: 22px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s, transform 0.1s;
+/* ========== 底部提示 ========== */
+.bottom-hint {
   flex-shrink: 0;
-}
-
-.add-btn:hover {
-  background: #8B6539;
-}
-
-.add-btn:active {
-  transform: scale(0.95);
+  text-align: center;
+  padding: 8px 16px;
+  background: #FDF8F0;
+  border-top: 1px solid #F0E8D8;
+  font-size: 11px;
+  color: #B8A68E;
+  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  letter-spacing: 1px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0));
 }
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 640px) {
-  .schedule-view {
-    padding-bottom: env(safe-area-inset-bottom, 0);
+  .top-bar {
+    padding: 12px 16px;
   }
 
-  .date-nav {
-    padding: 16px 12px;
+  .title {
+    font-size: 17px;
   }
 
-  .date-text {
-    font-size: 15px;
+  .week-nav {
+    padding: 10px 14px;
   }
 
-  .task-list-container {
-    padding: 10px 12px;
-  }
-
-  .task-card {
-    padding: 10px 12px;
-  }
-
-  .task-text {
+  .week-number {
     font-size: 14px;
   }
 
-  .bottom-area {
-    padding: 10px 12px;
+  .week-range {
+    font-size: 10px;
+  }
+
+  .week-content {
+    padding: 10px 12px 16px;
+  }
+
+  .day-short {
+    font-size: 13px;
+  }
+
+  .todo-text {
+    font-size: 12px;
+  }
+
+  /* 移动端删除按钮常显 */
+  .delete-btn {
+    opacity: 0.4;
   }
 }
 </style>

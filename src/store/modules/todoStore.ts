@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo } from '@/types/todo'
 import { getTodos, saveTodos, addTodo as storageAddTodo } from '@/utils/storage'
-import { getTodayDate } from '@/utils/date'
+import { getTodayDate, addDays } from '@/utils/date'
 
 /**
  * 待办事项状态管理 Store
@@ -149,6 +149,23 @@ export const useTodoStore = defineStore('todo', () => {
    */
   const datesWithTodosCount = computed<number>(() => datesWithTodos.value.length)
 
+  // ========== 方法：支持日期范围（多日期卡片用） ==========
+
+  /**
+   * 生成从 endDate 往前推 days 天的日期数组（倒序，最新在前）
+   * @param endDate - 起始日期（默认今天）
+   * @param days - 天数
+   * @returns 日期字符串数组（倒序）
+   */
+  function getRecentDates(endDate: string = getTodayDate(), days: number = 7): string[] {
+    const result: string[] = []
+    for (let i = 0; i < days; i++) {
+      // i=0 是 endDate 本身，i=1 是前一天……
+      result.push(addDays(endDate, -i))
+    }
+    return result
+  }
+
   return {
     // 状态
     todos,
@@ -171,5 +188,7 @@ export const useTodoStore = defineStore('todo', () => {
     getDateDoneCount,
     getDateTotalCount,
     getDateProgress,
+    // 方法（支持日期范围）
+    getRecentDates,
   }
 })

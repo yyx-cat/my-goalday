@@ -112,3 +112,57 @@ export function getWeekDates(dateStr: string = getTodayDate()): string[] {
   }
   return result
 }
+
+/**
+ * 获取某日期所在周的周一日期字符串
+ * @param dateStr - 任意日期字符串（可选，默认今天）
+ * @returns 本周一的日期字符串
+ */
+export function getMondayOfWeek(dateStr: string = getTodayDate()): string {
+  const date = parseDate(dateStr)
+  const day = date.getDay() // 0 = 周日，1 = 周一
+  // 周日(0) 回到本周一需要 -6 天，其他天数回到本周一需要 1-day 天
+  const offset = day === 0 ? -6 : 1 - day
+  return addDays(dateStr, offset)
+}
+
+/**
+ * 计算某日期是当年的第几周（中国习惯：周一开始，1月1日所在周为第1周）
+ * @param dateStr - 日期字符串
+ * @returns 周数（1-53）
+ */
+export function getWeekNumber(dateStr: string): number {
+  const date = parseDate(dateStr)
+  const year = date.getFullYear()
+  // 当年1月1日
+  const jan1 = new Date(year, 0, 1)
+  // 1月1日是周几（0=周日, 1=周一）
+  const jan1Day = jan1.getDay()
+  // 第一个周一：如果1月1日是周一，第一个周一就是1月1日；否则是下一个周一
+  // 周日(0) → +1，周一(1) → +0，周二(2) → +6 ... 计算到下一个周一的天数
+  const daysToFirstMonday = jan1Day === 0 ? 1 : (8 - jan1Day)
+  const firstMonday = new Date(year, 0, daysToFirstMonday)
+  // 如果当前日期早于第一个周一，说明属于去年的最后一周
+  if (date < firstMonday) {
+    // 返回去年最后一周的周数（用12月31日计算）
+    return getWeekNumber(formatDate(new Date(year - 1, 11, 31)))
+  }
+  // 计算当前日期与第一个周一的差值天数
+  const diffDays = Math.floor(
+    (date.getTime() - firstMonday.getTime()) / (24 * 60 * 60 * 1000)
+  )
+  // 每7天一周，+1 是因为第一周从1开始
+  return Math.floor(diffDays / 7) + 1
+}
+
+/**
+ * 获取某日期所在周的日期范围展示文本（如 "8月17日 - 8月23日"）
+ * @param dateStr - 任意日期字符串
+ * @returns 日期范围文本
+ */
+export function getWeekRangeText(dateStr: string): string {
+  const dates = getWeekDates(dateStr)
+  const start = parseDate(dates[0])
+  const end = parseDate(dates[6])
+  return `${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`
+}
