@@ -294,13 +294,14 @@ onMounted(() => {
 .notebook-view {
   min-height: 100%;
   width: 100%;
-  background: #FAF8F5;
+  background: var(--color-bg-main);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 20px 16px;
   overflow: hidden;
+  font-family: var(--font-family-sans);
 }
 
 /* ========== 空状态 ========== */
@@ -321,25 +322,24 @@ onMounted(() => {
 
 .empty-text {
   font-size: 16px;
-  color: #9C876C;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
 }
 
 .empty-tip-text {
   padding: 10px 24px;
-  border: 1px solid #C4A375;
+  border: 1px solid var(--color-text-primary);
   border-radius: 20px;
   background: transparent;
-  color: #8B6539;
+  color: var(--color-text-primary);
   font-size: 14px;
   cursor: pointer;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  font-family: var(--font-family-sans);
   transition: all 0.2s;
 }
 
 .empty-tip-text:hover {
-  background: #FDF8F0;
-  border-color: #A8824F;
+  background: var(--color-bg-surface);
 }
 
 /* ========== 书本容器 ========== */
@@ -388,7 +388,7 @@ onMounted(() => {
 
 /* 点击区域的视觉反馈 */
 .click-zone:active {
-  background: rgba(168, 130, 79, 0.05);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 /* ========== 书本样式覆盖 ========== */
@@ -411,10 +411,10 @@ onMounted(() => {
 /* 调整书本外观 */
 .notebook-book :deep(.turn-book) {
   background: transparent !important;
-  box-shadow: 
-    0 12px 40px rgba(94, 79, 61, 0.15),
-    0 4px 12px rgba(94, 79, 61, 0.1),
-    inset 0 0 0 1px rgba(208, 196, 180, 0.5) !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.1) !important;
   border-radius: 6px !important;
   /* 禁用默认的 cursor 样式 */
   cursor: default !important;
@@ -432,11 +432,11 @@ onMounted(() => {
 
 /* 调整页面背景为米白色 */
 .notebook-book :deep(.turn-page.odd) {
-  background: #FDF8F0 !important;
+  background: var(--color-bg-main) !important;
 }
 
 .notebook-book :deep(.turn-page.even) {
-  background: #FDF8F0 !important;
+  background: var(--color-bg-main) !important;
 }
 
 /* 隐藏页面边缘的折痕阴影 */
@@ -448,7 +448,7 @@ onMounted(() => {
 /* 调整折页包装器样式 */
 .notebook-book :deep(.turn-page-wrapper) {
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(94, 79, 61, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 /* 隐藏组件自带的页码指示器 */
@@ -477,16 +477,16 @@ onMounted(() => {
 .page-header {
   text-align: center;
   padding-bottom: 12px;
-  border-bottom: 1px dashed #E8DFD3;
+  border-bottom: 1px solid var(--color-border-divider);
 }
 
 .page-date {
   margin: 0;
   font-size: 18px;
-  font-weight: 600;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  letter-spacing: 1px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
+  letter-spacing: 0.5px;
 }
 
 /* 进度条 */
@@ -498,15 +498,15 @@ onMounted(() => {
 
 .progress-label {
   font-size: 12px;
-  color: #7D6A52;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
   flex-shrink: 0;
 }
 
 .progress-bar {
   flex: 1;
   height: 6px;
-  background: #F0E8D8;
+  background: var(--color-border-divider);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -514,15 +514,15 @@ onMounted(() => {
 .progress-fill {
   height: 100%;
   min-width: 0;
-  background: linear-gradient(90deg, #C4A375, #A8824F);
+  background: var(--color-text-primary);
   border-radius: 999px;
   transition: width 0.35s ease;
 }
 
 .progress-count {
   font-size: 12px;
-  color: #9C876C;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
   flex-shrink: 0;
 }
 
@@ -536,11 +536,11 @@ onMounted(() => {
 .section-title {
   margin: 0;
   font-size: 14px;
-  font-weight: 600;
-  color: #8B6539;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
   padding-bottom: 4px;
-  border-bottom: 1px solid #F0E8D8;
+  border-bottom: 1px solid var(--color-border-divider);
 }
 
 /* 任务项 */
@@ -549,35 +549,35 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: #FFFEF9;
+  background: var(--color-bg-main);
   border-radius: 8px;
-  border: 1px solid #F0E8D8;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  border: 1px solid var(--color-border-divider);
+  font-family: var(--font-family-sans);
 }
 
 .task-item.done {
-  opacity: 0.7;
+  opacity: 0.5;
 }
 
 .task-item.done .task-text {
   text-decoration: line-through;
-  color: #B8A68E;
+  color: var(--color-text-tertiary);
 }
 
 .task-icon {
   font-size: 16px;
-  color: #9C876C;
+  color: var(--color-text-secondary);
   flex-shrink: 0;
 }
 
 .task-item.done .task-icon {
-  color: #A8824F;
+  color: var(--color-text-primary);
 }
 
 .task-text {
   flex: 1;
   font-size: 14px;
-  color: #5E4F3D;
+  color: var(--color-text-primary);
   word-break: break-word;
   line-height: 1.5;
 }
@@ -586,17 +586,17 @@ onMounted(() => {
 .note-section {
   margin-top: auto;
   padding: 12px;
-  background: #FDF8F0;
+  background: var(--color-bg-surface);
   border-radius: 8px;
-  border: 1px solid #E8DFD3;
+  border: 1px solid var(--color-border-divider);
 }
 
 .note-text {
   margin: 0;
   font-size: 13px;
-  color: #7D6A52;
+  color: var(--color-text-secondary);
   line-height: 1.6;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  font-family: var(--font-family-sans);
 }
 
 /* 页码 */
@@ -606,8 +606,8 @@ onMounted(() => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 11px;
-  color: #B8A68E;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-sans);
   letter-spacing: 1px;
 }
 
@@ -617,15 +617,15 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 6px 20px;
-  background: #FDF8F0;
+  background: var(--color-bg-surface);
   border-radius: 16px;
-  border: 1px solid #E8DFD3;
+  border: 1px solid var(--color-border-divider);
 }
 
 .indicator-text {
   font-size: 13px;
-  color: #7D6A52;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
   letter-spacing: 1px;
 }
 

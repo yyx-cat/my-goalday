@@ -21,7 +21,7 @@ const stats = computed(() => [
 
 // 设置项（占位演示）
 const settings = [
-  { icon: '🎨', label: '主题外观', value: '复古手账' },
+  { icon: '🎨', label: '主题外观', value: '极简风格' },
   { icon: '🔔', label: '提醒设置', value: '未开启' },
   { icon: '💾', label: '数据备份', value: '本地存储' },
   { icon: 'ℹ️', label: '关于应用', value: 'v1.0.0' },
@@ -40,7 +40,7 @@ onMounted(() => {
   <div class="profile-view">
     <!-- 顶部标题区 -->
     <header class="view-header">
-      <h1 class="view-title">⚙️ 我的</h1>
+      <h1 class="view-title">我的</h1>
     </header>
 
     <!-- 用户头像卡片 -->
@@ -48,7 +48,7 @@ onMounted(() => {
       <div class="avatar">😊</div>
       <div class="user-info">
         <p class="user-name">手账爱好者</p>
-        <p class="user-desc">用一本手账，记录每一天</p>
+        <p class="user-desc">记录每一天</p>
       </div>
     </div>
 
@@ -70,9 +70,6 @@ onMounted(() => {
         <span class="setting-arrow">›</span>
       </div>
     </div>
-
-    <!-- 占位提示 -->
-    <p class="placeholder-hint">（个人中心占位 · 后续阶段实现完整功能）</p>
   </div>
 </template>
 
@@ -81,13 +78,14 @@ onMounted(() => {
 .profile-view {
   min-height: 100%;
   width: 100%;
-  background: #FAF8F5;
-  padding: 24px 20px 32px;
+  background: var(--color-bg-main);
+  padding: 24px 16px 32px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
+  font-family: var(--font-family-sans);
 }
 
 /* ========== 顶部标题区 ========== */
@@ -98,11 +96,11 @@ onMounted(() => {
 
 .view-title {
   margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
-  color: #5E4F3D;
-  letter-spacing: 2px;
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-family-sans);
+  color: var(--color-text-primary);
+  letter-spacing: 1px;
 }
 
 /* ========== 用户卡片 ========== */
@@ -111,17 +109,15 @@ onMounted(() => {
   align-items: center;
   gap: 14px;
   padding: 16px;
-  background: #FDF8F0;
-  border: 1px solid #F0E8D8;
+  background: var(--color-bg-surface);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .avatar {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
-  background: #EFE4D4;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-main);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -138,16 +134,16 @@ onMounted(() => {
 .user-name {
   margin: 0;
   font-size: 17px;
-  font-weight: 600;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
 }
 
 .user-desc {
   margin: 0;
   font-size: 12px;
-  color: #9C876C;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
 }
 
 /* ========== 统计数据网格 ========== */
@@ -163,8 +159,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   padding: 14px 8px;
-  background: #FDF8F0;
-  border: 1px solid #F0E8D8;
+  background: var(--color-bg-surface);
   border-radius: 10px;
 }
 
@@ -174,23 +169,22 @@ onMounted(() => {
 
 .stat-value {
   font-size: 18px;
-  font-weight: 700;
-  color: #5E4F3D;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
 }
 
 .stat-label {
   font-size: 12px;
-  color: #9C876C;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
 }
 
 /* ========== 设置列表 ========== */
 .settings-list {
   display: flex;
   flex-direction: column;
-  background: #FDF8F0;
-  border: 1px solid #F0E8D8;
+  background: var(--color-bg-surface);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -200,7 +194,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #F0E8D8;
+  border-bottom: 1px solid var(--color-border-divider);
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -210,7 +204,7 @@ onMounted(() => {
 }
 
 .setting-item:hover {
-  background: #FAF8F5;
+  background: var(--color-bg-main);
 }
 
 .setting-icon {
@@ -221,28 +215,19 @@ onMounted(() => {
 .setting-label {
   flex: 1;
   font-size: 14px;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
 }
 
 .setting-value {
   font-size: 12px;
-  color: #9C876C;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
 }
 
 .setting-arrow {
-  color: #B8A68E;
+  color: var(--color-text-tertiary);
   font-size: 16px;
-}
-
-/* ========== 占位提示 ========== */
-.placeholder-hint {
-  margin: 8px 0 0 0;
-  text-align: center;
-  font-size: 11px;
-  color: #B8A68E;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
 }
 
 /* ========== 移动端适配 ========== */
@@ -252,7 +237,7 @@ onMounted(() => {
   }
 
   .view-title {
-    font-size: 22px;
+    font-size: 20px;
   }
 }
 </style>

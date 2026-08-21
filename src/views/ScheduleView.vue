@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
+import { useHabitStore } from '@/store/modules/habitStore'
 import {
   getTodayDate,
   addDays,
-  formatChineseDate,
   parseDate,
   getWeekDay,
   getWeekDates,
@@ -15,184 +15,207 @@ import {
 import type { Todo } from '@/types/todo'
 
 const todoStore = useTodoStore()
+const habitStore = useHabitStore()
 
 /**
- * 单个日期卡片的数据结构
+ * 子标签类型
  */
-interface DayCard {
+type SubTab = 'record' | 'list' | 'habit'
+
+/**
+ * 单个日期行的数据结构（记录视图用）
+ */
+interface DayRow {
   /** 日期字符串 YYYY-MM-DD */
   date: string
-  /** 中文展示文本（如 2026年8月20日 · 星期四） */
-  dateDisplay: string
-  /** 星期几 */
+  /** 日期数字（如 18） */
+  dayNumber: number
+  /** 星期几（如 星期一） */
   weekday: string
-  /** 短日期展示（如 8月20日） */
-  shortDate: string
   /** 该天的任务列表 */
   todos: Todo[]
-  /** 卡片内输入框文本 */
-  newTodoText: string
   /** 是否是今天 */
   isToday: boolean
 }
 
 /**
- * 当前所在周的"锚定日期"（用任意一天即可定位整周）
- * 默认为今天，切换周时更新此值
+ * 清单视图中按日期分组的任务结构
  */
+interface TodoGroup {
+  /** 日期字符串 */
+  date: string
+  /** 中文日期展示（如 8月18日 周一） */
+  label: string
+  /** 该天任务列表 */
+  todos: Todo[]
+}
+
+// ========== 状态 ==========
+
+/** 当前激活的子标签（记录/清单/习惯） */
+const activeSubTab = ref<SubTab>('record')
+
+/** 当前所在周的锚定日期（默认今天） */
 const currentAnchor = ref<string>(getTodayDate())
 
-/**
- * 每个日期的输入框文本（独立存储，便于就地编辑）
- * key: date, value: 输入文本
- */
-const inputTextMap = ref<Record<string, string>>({})
+/** 周选择器下拉面板是否展开 */
+const weekDropdownOpen = ref<boolean>(false)
 
-/**
- * 滑动手势相关变量
- */
-let touchStartX = 0
-let touchStartY = 0
-let touchStartTime = 0
-const SWIPE_THRESHOLD = 50 // 滑动触发阈值（像素）
-const SWIPE_TIME_LIMIT = 500 // 滑动时间限制（毫秒）
+/** 记录视图中已展开的日期集合（手风琴） */
+const expandedDates = ref<Set<string>>(new Set())
 
-/**
- * 翻页动画方向与状态
- */
-const slideDirection = ref<'up' | 'down'>('up')
-const isAnimating = ref<boolean>(false)
+/** 记录视图中每个日期的就地输入文本 */
+const recordInputMap = ref<Record<string, string>>({})
+
+/** 清单视图输入框文本 */
+const listInputText = ref<string>('')
+
+/** 清单视图新任务的目标日期（默认今天） */
+const listInputDate = ref<string>(getTodayDate())
+
+/** 习惯视图新习惯名称输入 */
+const newHabitName = ref<string>('')
+
+/** 习惯视图新习惯图标（emoji） */
+const newHabitIcon = ref<string>('')
 
 // ========== 计算属性 ==========
 
-/**
- * 当前周的 7 天日期数组（周一到周日，正序）
- */
-const currentWeekDates = computed<string[]>(() => {
-  return getWeekDates(currentAnchor.value)
-})
+/** 当前周的 7 天日期数组（周一到周日正序） */
+const currentWeekDates = computed<string[]>(() => getWeekDates(currentAnchor.value))
 
-/**
- * 当前周的周一日期
- */
-const currentMonday = computed<string>(() => {
-  return getMondayOfWeek(currentAnchor.value)
-})
+/** 当前周是今年的第几周 */
+const currentWeekNumber = computed<number>(() => getWeekNumber(currentAnchor.value))
 
-/**
- * 当前周是今年的第几周
- */
-const currentWeekNumber = computed<number>(() => {
-  return getWeekNumber(currentAnchor.value)
-})
+/** 当前周的年份 */
+const currentYear = computed<number>(() => parseDate(getMondayOfWeek(currentAnchor.value)).getFullYear())
 
-/**
- * 当前周的年份
- */
-const currentYear = computed<number>(() => {
-  return parseDate(currentMonday.value).getFullYear()
-})
+/** 当前周的日期范围文本（如 8月17日 - 8月23日） */
+const weekRangeText = computed<string>(() => getWeekRangeText(currentAnchor.value))
 
-/**
- * 当前周的日期范围文本（如 "8月17日 - 8月23日"）
- */
-const weekRangeText = computed<string>(() => {
-  return getWeekRangeText(currentAnchor.value)
-})
+/** 是否是本周 */
+const isCurrentWeek = computed<boolean>(() => getMondayOfWeek(currentAnchor.value) === getMondayOfWeek(getTodayDate()))
 
-/**
- * 是否是本周（今天所在的周）
- */
-const isCurrentWeek = computed<boolean>(() => {
-  return getMondayOfWeek(currentAnchor.value) === getMondayOfWeek(getTodayDate())
-})
-
-/**
- * 当前周的 7 天卡片数据
- */
-const dayCards = computed<DayCard[]>(() => {
+/** 记录视图：当前周的日期行数据 */
+const dayRows = computed<DayRow[]>(() => {
   const dates = currentWeekDates.value
   const allTodos = todoStore.todos
   const today = getTodayDate()
-
   return dates.map(date => {
     const dateObj = parseDate(date)
     return {
       date,
-      dateDisplay: formatChineseDate(date),
+      dayNumber: dateObj.getDate(),
       weekday: getWeekDay(dateObj),
-      shortDate: `${dateObj.getMonth() + 1}月${dateObj.getDate()}日`,
       todos: allTodos.filter(t => t.date === date),
-      newTodoText: inputTextMap.value[date] || '',
       isToday: date === today,
     }
   })
 })
 
-// ========== 方法 ==========
+/** 清单视图：所有任务按日期倒序分组 */
+const todoGroups = computed<TodoGroup[]>(() => {
+  const allTodos = todoStore.todos
+  // 收集所有出现过的日期
+  const dateSet = new Set<string>()
+  allTodos.forEach(t => dateSet.add(t.date))
+  // 倒序排列（最新在前）
+  const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a))
+  return sortedDates.map(date => {
+    const dateObj = parseDate(date)
+    const label = `${dateObj.getMonth() + 1}月${dateObj.getDate()}日 ${getWeekDay(dateObj)}`
+    return {
+      date,
+      label,
+      todos: allTodos.filter(t => t.date === date),
+    }
+  })
+})
+
+/** 清单视图：总任务数与已完成数 */
+const listStats = computed(() => {
+  const all = todoStore.todos
+  const done = all.filter(t => t.done).length
+  return { total: all.length, done }
+})
+
+/** 习惯视图：习惯列表 */
+const habits = computed(() => habitStore.habits)
+
+/** 习惯视图：今日打卡统计 */
+const habitStats = computed(() => ({
+  done: habitStore.todayCheckInCount,
+  total: habitStore.habitsCount,
+}))
+
+// ========== 方法：周导航 ==========
 
 /**
- * 切换到上一周（更早的日期）
+ * 切换到上一周
  */
 function goPrevWeek(): void {
-  if (isAnimating.value) return
-  slideDirection.value = 'down'
-  isAnimating.value = true
-  // 往前推 7 天
   currentAnchor.value = addDays(currentAnchor.value, -7)
-  setTimeout(() => {
-    isAnimating.value = false
-  }, 300)
+  weekDropdownOpen.value = false
 }
 
 /**
- * 切换到下一周（更晚的日期）
+ * 切换到下一周
  */
 function goNextWeek(): void {
-  if (isAnimating.value) return
-  slideDirection.value = 'up'
-  isAnimating.value = true
-  // 往后推 7 天
   currentAnchor.value = addDays(currentAnchor.value, 7)
-  setTimeout(() => {
-    isAnimating.value = false
-  }, 300)
+  weekDropdownOpen.value = false
 }
 
 /**
- * 回到本周（今天所在的周）
+ * 回到本周
  */
 function goThisWeek(): void {
-  if (isCurrentWeek.value) return
-  const thisWeekMonday = getMondayOfWeek(getTodayDate())
-  // 根据当前周与本周的相对位置决定动画方向
-  slideDirection.value = thisWeekMonday > currentMonday.value ? 'up' : 'down'
-  isAnimating.value = true
   currentAnchor.value = getTodayDate()
-  setTimeout(() => {
-    isAnimating.value = false
-  }, 300)
+  weekDropdownOpen.value = false
 }
 
 /**
- * 设置某个日期的输入框文本
- * @param date - 日期字符串
- * @param text - 输入文本
+ * 切换周选择器下拉面板
  */
-function setInputText(date: string, text: string): void {
-  inputTextMap.value[date] = text
+function toggleWeekDropdown(): void {
+  weekDropdownOpen.value = !weekDropdownOpen.value
+}
+
+// ========== 方法：子标签切换 ==========
+
+/**
+ * 切换子标签
+ * @param tab - 目标子标签
+ */
+function switchSubTab(tab: SubTab): void {
+  activeSubTab.value = tab
+}
+
+// ========== 方法：记录视图任务 ==========
+
+/**
+ * 切换某日期行的展开/收起状态
+ * @param date - 日期字符串
+ */
+function toggleExpand(date: string): void {
+  const set = new Set(expandedDates.value)
+  if (set.has(date)) {
+    set.delete(date)
+  } else {
+    set.add(date)
+  }
+  expandedDates.value = set
 }
 
 /**
- * 在某个日期卡片内添加任务
+ * 记录视图：在某天添加任务
  * @param date - 日期字符串
  */
-function handleAddTodo(date: string): void {
-  const text = (inputTextMap.value[date] || '').trim()
+function handleRecordAdd(date: string): void {
+  const text = (recordInputMap.value[date] || '').trim()
   if (!text) return
   todoStore.addTodo(text, date)
-  // 清空输入框
-  inputTextMap.value[date] = ''
+  recordInputMap.value[date] = ''
 }
 
 /**
@@ -211,117 +234,156 @@ function handleDeleteTodo(id: string): void {
   todoStore.deleteTodo(id)
 }
 
-// ========== 滑动手势处理 ==========
+// ========== 方法：清单视图 ==========
 
 /**
- * 触摸开始
- * @param e - 触摸事件
+ * 清单视图：添加任务（关联 listInputDate）
  */
-function handleTouchStart(e: TouchEvent): void {
-  touchStartX = e.touches[0].clientX
-  touchStartY = e.touches[0].clientY
-  touchStartTime = Date.now()
+function handleListAdd(): void {
+  const text = listInputText.value.trim()
+  if (!text) return
+  todoStore.addTodo(text, listInputDate.value)
+  listInputText.value = ''
+}
+
+// ========== 方法：习惯视图 ==========
+
+/**
+ * 创建新习惯
+ */
+function handleCreateHabit(): void {
+  const name = newHabitName.value.trim()
+  if (!name) return
+  habitStore.createHabit(name, newHabitIcon.value || undefined)
+  newHabitName.value = ''
+  newHabitIcon.value = ''
 }
 
 /**
- * 触摸结束，判断滑动方向
- * 主要检测纵向滑动（上下切换周）
- * @param e - 触摸事件
+ * 切换习惯今日打卡状态
+ * @param habitId - 习惯 id
  */
-function handleTouchEnd(e: TouchEvent): void {
-  const touchEndX = e.changedTouches[0].clientX
-  const touchEndY = e.changedTouches[0].clientY
-  const diffX = touchStartX - touchEndX
-  const diffY = touchStartY - touchEndY
-  const duration = Date.now() - touchStartTime
+function handleToggleHabit(habitId: string): void {
+  habitStore.toggleCheckIn(habitId, getTodayDate())
+}
 
-  // 超过时间限制则不触发
-  if (duration > SWIPE_TIME_LIMIT) return
+/**
+ * 删除习惯
+ * @param habitId - 习惯 id
+ */
+function handleDeleteHabit(habitId: string): void {
+  habitStore.deleteHabit(habitId)
+}
 
-  // 优先判断纵向滑动（上下切换周）
-  if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > SWIPE_THRESHOLD) {
-    // 手指向上滑（diffY > 0）→ 切换到下一周（更晚的日期）
-    if (diffY > 0) {
-      goNextWeek()
-    }
-    // 手指向下滑（diffY < 0）→ 切换到上一周（更早的日期）
-    else {
-      goPrevWeek()
-    }
-  }
+/**
+ * 判断习惯今日是否已打卡
+ * @param habitId - 习惯 id
+ * @returns 是否已打卡
+ */
+function isHabitCheckedToday(habitId: string): boolean {
+  return habitStore.isCheckedIn(habitId, getTodayDate())
 }
 
 // 组件挂载时加载数据
 onMounted(() => {
   todoStore.loadTodos()
+  habitStore.loadHabits()
 })
 </script>
 
 <template>
   <div class="schedule-view">
-    <!-- 顶部标题栏 -->
-    <header class="top-bar">
-      <h1 class="title">📅 日程</h1>
-      <button
-        v-if="!isCurrentWeek"
-        class="today-btn"
-        @click="goThisWeek"
-      >本周</button>
-    </header>
+    <!-- 顶部导航栏（藕灰背景） -->
+    <header class="top-nav">
+      <div class="nav-content">
+        <!-- 左侧：周选择器 -->
+        <button class="week-selector" @click="toggleWeekDropdown">
+          <span class="week-text">第 {{ currentWeekNumber }} 周</span>
+          <svg class="dropdown-arrow" :class="{ open: weekDropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
 
-    <!-- 周导航栏 -->
-    <div class="week-nav">
-      <button
-        class="week-nav-btn"
-        @click="goPrevWeek"
-        :disabled="isAnimating"
-      >‹</button>
-
-      <div class="week-center">
-        <p class="week-number">{{ currentYear }}年 第 {{ currentWeekNumber }} 周</p>
-        <p class="week-range">{{ weekRangeText }}</p>
+        <!-- 右侧：子标签 记录 | 清单 | 习惯 -->
+        <nav class="sub-tabs">
+          <button
+            class="sub-tab"
+            :class="{ active: activeSubTab === 'record' }"
+            @click="switchSubTab('record')"
+          >记录</button>
+          <span class="tab-divider">|</span>
+          <button
+            class="sub-tab"
+            :class="{ active: activeSubTab === 'list' }"
+            @click="switchSubTab('list')"
+          >清单</button>
+          <span class="tab-divider">|</span>
+          <button
+            class="sub-tab"
+            :class="{ active: activeSubTab === 'habit' }"
+            @click="switchSubTab('habit')"
+          >习惯</button>
+        </nav>
       </div>
 
-      <button
-        class="week-nav-btn"
-        @click="goNextWeek"
-        :disabled="isAnimating"
-      >›</button>
-    </div>
+      <!-- 周选择器下拉面板 -->
+      <div v-if="weekDropdownOpen" class="week-dropdown">
+        <div class="dropdown-header">
+          <span>{{ currentYear }}年 第 {{ currentWeekNumber }} 周</span>
+          <span class="dropdown-range">{{ weekRangeText }}</span>
+        </div>
+        <div class="dropdown-actions">
+          <button class="dropdown-btn" @click="goPrevWeek">‹ 上一周</button>
+          <button class="dropdown-btn" v-if="!isCurrentWeek" @click="goThisWeek">本周</button>
+          <button class="dropdown-btn" @click="goNextWeek">下一周 ›</button>
+        </div>
+      </div>
+    </header>
 
-    <!-- 一周的日期卡片区域（支持上下滑动切换周） -->
-    <div
-      class="week-container"
-      @touchstart.passive="handleTouchStart"
-      @touchend.passive="handleTouchEnd"
-    >
-      <!-- 翻页动画容器 -->
-      <div
-        class="week-content"
-        :class="[isAnimating ? `slide-${slideDirection}` : '']"
-      >
+    <!-- 主内容区（三视图切换） -->
+    <div class="main-body">
+      <!-- ========== 记录视图：日期列表行 ========== -->
+      <div v-show="activeSubTab === 'record'" class="view-record">
         <div
-          v-for="card in dayCards"
-          :key="card.date"
-          class="day-card"
-          :class="{ today: card.isToday }"
+          v-for="row in dayRows"
+          :key="row.date"
+          class="daily-item"
+          :class="{ today: row.isToday, expanded: expandedDates.has(row.date) }"
         >
-          <!-- 日期标题 -->
-          <div class="day-header">
-            <div class="day-info">
-              <span class="day-short">{{ card.shortDate }}</span>
-              <span class="day-weekday">{{ card.weekday }}</span>
+          <!-- 日期行（点击展开） -->
+          <div class="item-row" @click="toggleExpand(row.date)">
+            <!-- 日期块：数字 + 短横线 + 周几 -->
+            <div class="date-block">
+              <span class="day-number">{{ row.dayNumber }}</span>
+              <div class="separator-line"></div>
+              <span class="day-of-week">{{ row.weekday }}</span>
             </div>
-            <span v-if="card.isToday" class="today-tag">今天</span>
-            <span v-else-if="card.todos.length > 0" class="count-tag">
-              {{ card.todos.filter(t => t.done).length }}/{{ card.todos.length }}
-            </span>
+
+            <!-- 右侧：任务统计 + 展开箭头 -->
+            <div class="item-right">
+              <span v-if="row.todos.length > 0" class="item-count">
+                {{ row.todos.filter(t => t.done).length }}/{{ row.todos.length }}
+              </span>
+              <!-- 悬浮按钮（展开时显示，左箭头收起） -->
+              <button
+                v-if="expandedDates.has(row.date)"
+                class="floating-btn"
+                @click.stop="toggleExpand(row.date)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <svg v-else class="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 6 15 12 9 18" />
+              </svg>
+            </div>
           </div>
 
-          <!-- 任务列表 -->
-          <div class="todo-list">
+          <!-- 展开内容：当天任务列表 + 输入框 -->
+          <div v-if="expandedDates.has(row.date)" class="expanded-content">
             <div
-              v-for="todo in card.todos"
+              v-for="todo in row.todos"
               :key="todo.id"
               class="todo-item"
               :class="{ completed: todo.done }"
@@ -333,29 +395,104 @@ onMounted(() => {
               <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
             </div>
 
-            <!-- 空状态提示 -->
-            <div v-if="card.todos.length === 0" class="empty-tip">
-              ✨ 这天还没有待办
-            </div>
-          </div>
+            <div v-if="row.todos.length === 0" class="empty-tip">✨ 这天还没有待办</div>
 
-          <!-- 卡片内就地输入框 -->
-          <div class="inline-input-area">
+            <!-- 就地输入框 -->
             <input
-              :value="card.newTodoText"
-              @input="setInputText(card.date, ($event.target as HTMLInputElement).value)"
-              @keyup.enter="handleAddTodo(card.date)"
+              :value="recordInputMap[row.date] || ''"
+              @input="recordInputMap[row.date] = ($event.target as HTMLInputElement).value"
+              @keyup.enter="handleRecordAdd(row.date)"
               placeholder="✍️ 写待办..."
               class="inline-input"
             />
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- 底部提示 -->
-    <div class="bottom-hint">
-      <span>↑ 下滑下一周 · ↓ 上滑上一周</span>
+      <!-- ========== 清单视图：所有任务汇总 ========== -->
+      <div v-show="activeSubTab === 'list'" class="view-list">
+        <!-- 顶部统计 + 添加 -->
+        <div class="list-header">
+          <span class="list-stats">已完成 {{ listStats.done }}/{{ listStats.total }}</span>
+        </div>
+
+        <!-- 添加任务输入区 -->
+        <div class="list-add-area">
+          <input
+            v-model="listInputDate"
+            type="date"
+            class="date-picker"
+          />
+          <input
+            v-model="listInputText"
+            @keyup.enter="handleListAdd"
+            placeholder="✍️ 写待办..."
+            class="inline-input"
+          />
+        </div>
+
+        <!-- 分组任务列表 -->
+        <div v-if="todoGroups.length > 0">
+          <div v-for="group in todoGroups" :key="group.date" class="todo-group">
+            <div class="group-header">{{ group.label }}</div>
+            <div
+              v-for="todo in group.todos"
+              :key="todo.id"
+              class="todo-item"
+              :class="{ completed: todo.done }"
+            >
+              <button class="check-btn" @click="handleToggleTodo(todo.id)">
+                {{ todo.done ? '☑' : '☐' }}
+              </button>
+              <span class="todo-text">{{ todo.text }}</span>
+              <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="empty-state">✨ 还没有待办，写一件小目标吧</div>
+      </div>
+
+      <!-- ========== 习惯视图：习惯打卡 ========== -->
+      <div v-show="activeSubTab === 'habit'" class="view-habit">
+        <!-- 今日打卡统计 -->
+        <div class="habit-stats">
+          今日已打卡 {{ habitStats.done }}/{{ habitStats.total }}
+        </div>
+
+        <!-- 添加新习惯 -->
+        <div class="habit-add-area">
+          <input
+            v-model="newHabitIcon"
+            placeholder="🎯"
+            class="habit-icon-input"
+            maxlength="2"
+          />
+          <input
+            v-model="newHabitName"
+            @keyup.enter="handleCreateHabit"
+            placeholder="✍️ 新习惯名称..."
+            class="inline-input habit-name-input"
+          />
+        </div>
+
+        <!-- 习惯列表 -->
+        <div v-if="habits.length > 0" class="habit-list">
+          <div v-for="habit in habits" :key="habit.id" class="habit-item">
+            <button
+              class="habit-check"
+              :class="{ checked: isHabitCheckedToday(habit.id) }"
+              @click="handleToggleHabit(habit.id)"
+            >
+              {{ isHabitCheckedToday(habit.id) ? '✓' : habit.icon || '○' }}
+            </button>
+            <span class="habit-name">{{ habit.name }}</span>
+            <button class="delete-btn" @click="handleDeleteHabit(habit.id)">✕</button>
+          </div>
+        </div>
+
+        <div v-else class="empty-state">✨ 还没有习惯，添加一个开始打卡吧</div>
+      </div>
     </div>
   </div>
 </template>
@@ -366,441 +503,516 @@ onMounted(() => {
   min-height: 0;
   height: 100%;
   width: 100%;
-  background: #FAF8F5;
+  background: var(--color-bg-main);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  font-family: var(--font-family-sans);
 }
 
-/* ========== 顶部标题栏 ========== */
-.top-bar {
+/* ========== 顶部导航栏 ========== */
+.top-nav {
+  flex-shrink: 0;
+  background: var(--color-bg-surface);
+  position: relative;
+  z-index: 5;
+}
+
+.nav-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 60px;
+  padding: 0 16px;
+}
+
+/* 周选择器 */
+.week-selector {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  background: #FDF8F0;
-  border-bottom: 1px solid #F0E8D8;
-  flex-shrink: 0;
-}
-
-.title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  letter-spacing: 1px;
-}
-
-.today-btn {
-  padding: 5px 14px;
-  border: 1px solid #C4A375;
-  border-radius: 12px;
+  gap: 4px;
+  border: none;
   background: transparent;
-  color: #8B6539;
-  font-size: 12px;
   cursor: pointer;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  transition: all 0.2s;
-}
-
-.today-btn:hover {
-  background: #EFE4D4;
-  border-color: #A8824F;
-}
-
-/* ========== 周导航栏 ========== */
-.week-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: #FDF8F0;
-  border-bottom: 1px solid #F0E8D8;
-  flex-shrink: 0;
-}
-
-.week-nav-btn {
-  width: 32px;
-  height: 32px;
-  border: 1.5px solid #E8DFD3;
-  border-radius: 50%;
-  background: #FFFEF9;
-  color: #8B6539;
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
+  font-family: var(--font-family-sans);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
   padding: 0;
-  flex-shrink: 0;
 }
 
-.week-nav-btn:hover:not(:disabled) {
-  border-color: #C4A375;
-  background: #FAF8F5;
-  transform: scale(1.05);
+.dropdown-arrow {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s;
 }
 
-.week-nav-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.dropdown-arrow.open {
+  transform: rotate(180deg);
 }
 
-.week-center {
-  text-align: center;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.week-number {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  letter-spacing: 0.5px;
-}
-
-.week-range {
-  margin: 0;
-  font-size: 11px;
-  color: #9C876C;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
-}
-
-/* ========== 周内容区域 ========== */
-.week-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-  /* iOS 动量滚动 */
-  -webkit-overflow-scrolling: touch;
-  /* 禁止页面滚动反弹干扰手势 */
-  overscroll-behavior: contain;
-}
-
-.week-content {
-  padding: 12px 16px 20px;
-  transition: transform 0.3s ease-out, opacity 0.3s ease-out;
-}
-
-/* 翻页过渡动画 */
-.slide-up {
-  animation: slideOutUp 0.3s ease-out, slideInFromBottom 0.3s ease-out 0.15s;
-}
-
-.slide-down {
-  animation: slideOutDown 0.3s ease-out, slideInFromTop 0.3s ease-out 0.15s;
-}
-
-@keyframes slideOutUp {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(-30px); opacity: 0.3; }
-}
-
-@keyframes slideInFromBottom {
-  0% { transform: translateY(30px); opacity: 0.3; }
-  100% { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes slideOutDown {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(30px); opacity: 0.3; }
-}
-
-@keyframes slideInFromTop {
-  0% { transform: translateY(-30px); opacity: 0.3; }
-  100% { transform: translateY(0); opacity: 1; }
-}
-
-/* 滚动条样式 */
-.week-container::-webkit-scrollbar {
-  width: 4px;
-}
-
-.week-container::-webkit-scrollbar-thumb {
-  background: #D4C5B0;
-  border-radius: 10px;
-}
-
-.week-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* ========== 单个日期卡片 ========== */
-.day-card {
-  background: #FDF8F0;
-  border-radius: 10px;
-  border: 1px solid #F0E8D8;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.04),
-    0 2px 6px rgba(0, 0, 0, 0.03);
-  margin-bottom: 10px;
-  overflow: hidden;
-  transition: all 0.2s;
-}
-
-.day-card:hover {
-  box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.06),
-    0 3px 10px rgba(0, 0, 0, 0.04);
-}
-
-/* 今天的卡片高亮 */
-.day-card.today {
-  border-color: #C4A375;
-  background: #FFFEF5;
-  box-shadow:
-    0 2px 8px rgba(196, 163, 117, 0.2),
-    0 3px 12px rgba(196, 163, 117, 0.1);
-}
-
-/* ========== 日期标题 ========== */
-.day-header {
+/* 子标签 */
+.sub-tabs {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: #FFFEF9;
-  border-bottom: 1px dashed #F0E8D8;
+  gap: 16px;
 }
 
-.day-card.today .day-header {
-  background: #FBF6E8;
-}
-
-.day-info {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.day-short {
+.sub-tab {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
   font-size: 14px;
-  font-weight: 600;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-tertiary);
+  padding: 0;
+  transition: color 0.2s;
 }
 
-.day-weekday {
+.sub-tab.active {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.tab-divider {
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+}
+
+/* 周下拉面板 */
+.week-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 16px;
+  background: #fff;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 12px;
+  min-width: 200px;
+  z-index: 10;
+}
+
+.dropdown-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-divider);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.dropdown-range {
   font-size: 12px;
-  color: #9C876C;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
 }
 
-.today-tag {
-  padding: 2px 10px;
-  background: #A8824F;
-  color: #FFF9F0;
-  font-size: 11px;
-  border-radius: 10px;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-}
-
-.count-tag {
-  padding: 2px 8px;
-  background: #EFE4D4;
-  color: #8B6539;
-  font-size: 11px;
-  border-radius: 10px;
-  font-family: 'Noto Serif SC', '思源宋体', serif;
-}
-
-/* ========== 任务列表 ========== */
-.todo-list {
-  padding: 6px 10px;
+.dropdown-actions {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
+.dropdown-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: 6px;
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  transition: background 0.2s;
+}
+
+.dropdown-btn:hover {
+  background: var(--color-bg-main);
+}
+
+/* ========== 主内容区 ========== */
+.main-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ========== 记录视图：日期列表行 ========== */
+.daily-item {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--color-border-divider);
+  background: var(--color-bg-main);
+}
+
+.daily-item.today {
+  background: #fff;
+}
+
+.daily-item.expanded {
+  border-bottom: none;
+}
+
+/* 日期行 */
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 80px;
+  padding: 0 20px;
+  cursor: pointer;
+}
+
+/* 日期块：数字 + 短横线 + 周几 */
+.date-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: fit-content;
+}
+
+.day-number {
+  font-size: 20px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.separator-line {
+  width: 100%;
+  height: 1px;
+  background: var(--color-text-primary);
+  margin: 2px 0;
+}
+
+.day-of-week {
+  font-size: 12px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-secondary);
+}
+
+/* 行右侧 */
+.item-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.item-count {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+}
+
+.chevron-right {
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-tertiary);
+}
+
+/* 悬浮按钮（展开时显示） */
+.floating-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  padding: 0;
+}
+
+.floating-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 展开内容 */
+.expanded-content {
+  padding: 8px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+/* ========== 通用任务项 ========== */
 .todo-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 10px;
-  background: #FFFEF9;
-  border-radius: 7px;
-  border: 1px solid #F5EFE3;
-  transition: all 0.2s;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border-divider);
 }
 
-.todo-item:hover {
-  background: #FDF8F0;
-  border-color: #EFE4D4;
+.todo-item:last-child {
+  border-bottom: none;
 }
 
 .todo-item.completed {
-  opacity: 0.6;
-  background: #FAF8F5;
+  opacity: 0.5;
 }
 
-/* 复选框 */
 .check-btn {
   width: 22px;
   height: 22px;
   border: none;
   background: transparent;
-  font-size: 17px;
-  color: #9C876C;
+  font-size: 18px;
+  color: var(--color-text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.2s;
   padding: 0;
+  flex-shrink: 0;
 }
 
-.check-btn:hover {
-  color: #8B6539;
-  transform: scale(1.15);
-}
-
-.todo-item.completed .check-btn {
-  color: #A8824F;
-}
-
-/* 任务文字 */
 .todo-text {
   flex: 1;
-  font-size: 13px;
-  color: #5E4F3D;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
+  font-size: 14px;
+  color: var(--color-text-primary);
   word-break: break-word;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .todo-item.completed .todo-text {
   text-decoration: line-through;
-  color: #B8A68E;
+  color: var(--color-text-secondary);
 }
 
-/* 删除按钮 */
 .delete-btn {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: none;
   background: transparent;
-  color: #C8B8A0;
+  color: var(--color-text-tertiary);
   font-size: 13px;
   cursor: pointer;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.2s;
   padding: 0;
-  opacity: 0;
-}
-
-.todo-item:hover .delete-btn {
-  opacity: 1;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
 }
 
 .delete-btn:hover {
-  background: #FBF0F0;
-  color: #A05555;
+  color: #BF7575;
 }
 
-/* 空状态提示 */
-.empty-tip {
-  text-align: center;
-  padding: 8px 6px;
-  color: #C8B8A0;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  font-size: 11px;
-}
-
-/* ========== 就地输入框 ========== */
-.inline-input-area {
-  padding: 6px 10px 10px;
-  border-top: 1px dashed #F5EFE3;
-}
-
+/* 就地输入框 */
 .inline-input {
   width: 100%;
-  padding: 7px 10px;
-  border: 1.5px dashed #E8DFD3;
-  border-radius: 7px;
-  background: #FFFEF9;
-  font-size: 13px;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  color: #5E4F3D;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 6px;
+  background: var(--color-bg-main);
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
   outline: none;
-  transition: all 0.2s;
   box-sizing: border-box;
-}
-
-.inline-input::placeholder {
-  color: #C8B8A0;
-  font-style: italic;
+  margin-top: 4px;
+  transition: border-color 0.2s;
 }
 
 .inline-input:focus {
-  border-color: #C4A375;
-  border-style: solid;
-  background: #FFF;
-  box-shadow: 0 0 0 3px rgba(196, 163, 117, 0.12);
+  border-color: var(--color-text-secondary);
 }
 
-/* ========== 底部提示 ========== */
-.bottom-hint {
-  flex-shrink: 0;
+.inline-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* 空状态 */
+.empty-tip {
   text-align: center;
-  padding: 8px 16px;
-  background: #FDF8F0;
-  border-top: 1px solid #F0E8D8;
-  font-size: 11px;
-  color: #B8A68E;
-  font-family: 'LXGW WenKai', '霞鹜文楷', serif;
-  letter-spacing: 1px;
-  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0));
+  padding: 8px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+}
+
+/* ========== 清单视图 ========== */
+.view-list {
+  padding-bottom: 20px;
+}
+
+.list-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.list-stats {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.list-add-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.date-picker {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 6px;
+  background: var(--color-bg-main);
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.list-add-area .inline-input {
+  margin-top: 0;
+}
+
+.todo-group {
+  padding: 0 20px;
+}
+
+.group-header {
+  padding: 12px 0 4px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ========== 习惯视图 ========== */
+.view-habit {
+  padding-bottom: 20px;
+}
+
+.habit-stats {
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.habit-add-area {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.habit-icon-input {
+  width: 48px;
+  padding: 8px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 6px;
+  background: var(--color-bg-main);
+  font-family: var(--font-family-sans);
+  font-size: 18px;
+  text-align: center;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.habit-name-input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.habit-list {
+  padding: 0 20px;
+}
+
+.habit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.habit-item:last-child {
+  border-bottom: none;
+}
+
+.habit-check {
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--color-border-divider);
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--color-text-tertiary);
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.habit-check.checked {
+  border-color: var(--color-text-primary);
+  background: var(--color-text-primary);
+  color: #fff;
+}
+
+.habit-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--color-text-primary);
 }
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 640px) {
-  .top-bar {
-    padding: 12px 16px;
+  .nav-content {
+    height: 56px;
+    padding: 0 14px;
   }
 
-  .title {
-    font-size: 17px;
+  .week-text {
+    font-size: 15px;
   }
 
-  .week-nav {
-    padding: 10px 14px;
+  .sub-tabs {
+    gap: 12px;
   }
 
-  .week-number {
-    font-size: 14px;
-  }
-
-  .week-range {
-    font-size: 10px;
-  }
-
-  .week-content {
-    padding: 10px 12px 16px;
-  }
-
-  .day-short {
+  .sub-tab {
     font-size: 13px;
   }
 
-  .todo-text {
-    font-size: 12px;
+  .item-row {
+    min-height: 72px;
+    padding: 0 16px;
   }
 
-  /* 移动端删除按钮常显 */
-  .delete-btn {
-    opacity: 0.4;
+  .day-number {
+    font-size: 18px;
+  }
+
+  .expanded-content {
+    padding: 8px 16px 14px;
   }
 }
 </style>

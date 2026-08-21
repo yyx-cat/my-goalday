@@ -8,74 +8,49 @@ export default {
   ],
   theme: {
     extend: {
-      // 自定义颜色 - 手账复古风格
+      // 自定义颜色 - 极简黑白灰 + 藕灰导航风格
       colors: {
-        // 米白色系
-        'cream': {
-          50: '#FFFEF9',
-          100: '#FFF9F0',
-          200: '#FFF3E0',
-          300: '#FCE8C8',
-          400: '#F5D9A8',
-          500: '#E8C78A',
+        // 背景色系
+        'bg': {
+          'main': '#FCF9F6',      // 主体内容背景色（略偏米白）
+          'surface': '#EAE0D8',   // 导航栏及悬浮按钮背景色（暖灰/藕灰色）
         },
-        // 暖灰色系
-        'warm-gray': {
-          50: '#FAF8F5',
-          100: '#F5F0EA',
-          200: '#E8DFD3',
-          300: '#D4C5B0',
-          400: '#B8A68E',
-          500: '#9C876C',
-          600: '#7D6A52',
-          700: '#5E4F3D',
+        // 文字色系
+        'text': {
+          'primary': '#1A1A1A',   // 主标题、日期数字、周数（黑色）
+          'secondary': '#666666', // 星期几、次要说明
+          'tertiary': '#999999',  // 未选中的导航文字
         },
-        // 复古棕色系
-        'vintage-brown': {
-          50: '#F8F3ED',
-          100: '#EFE4D4',
-          200: '#DCC6A7',
-          300: '#C4A375',
-          400: '#A8824F',
-          500: '#8B6539',
-          600: '#6E4E2B',
-        },
-        // 复古墨绿
-        'vintage-green': {
-          100: '#E5EDE4',
-          200: '#C5D6C2',
-          300: '#9DB898',
-          400: '#6F9369',
-          500: '#4E7348',
-        },
-        // 复古脏粉
-        'vintage-pink': {
-          100: '#F6E4E4',
-          200: '#ECC7C7',
-          300: '#D99F9F',
-          400: '#BF7575',
-          500: '#A05555',
-        },
-        // 复古雾霾蓝
-        'vintage-blue': {
-          100: '#E1E8ED',
-          200: '#BFCFDB',
-          300: '#90AEC2',
-          400: '#628BA5',
-          500: '#436E89',
+        // 边框色系
+        'border': {
+          'divider': '#E0E0E0',   // 列表项之间的分割线颜色
         },
       },
-      // 自定义字体 - 手账风格
+      // 自定义字体 - 系统无衬线（极简风格）
       fontFamily: {
-        // 霞鹜文楷 - 手写风格主字体
-        'kai': ['"LXGW WenKai"', '"霞鹜文楷"', 'serif'],
-        // 思源宋体 - 正式标题字体
-        'song': ['"Noto Serif SC"', '"Source Han Serif SC"', '"思源宋体"', 'serif'],
-        // 手写体通用回退
-        'handwriting': ['"LXGW WenKai"', '"霞鹜文楷"', '"Ma Shan Zheng"', '"楷体"', 'KaiTi', 'serif'],
+        // 系统字体栈 - 跨平台原生体验
+        'sans': [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+      },
+      // 字号
+      fontSize: {
+        'xs': ['12px', 'normal'],   // 星期几
+        'sm': ['14px', 'normal'],   // 导航栏标签
+        'base': ['16px', 'medium'], // 顶部周数
+        'lg': ['20px', 'semibold'], // 日期数字
+      },
+      // 间距
+      spacing: {
+        'safe': '16px',  // 左右安全边距
       },
     },
   },
   plugins: [],
 }
-
