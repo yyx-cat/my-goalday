@@ -166,3 +166,40 @@ export function getWeekRangeText(dateStr: string): string {
   const end = parseDate(dates[6])
   return `${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`
 }
+
+/**
+ * 获取某日期所属月份的键值（如 "2026-08"）
+ * 用于按月分组的任务（如月度清单）
+ * @param dateStr - 任意日期字符串（可选，默认今天）
+ * @returns 月份键 'YYYY-MM'
+ */
+export function getMonthKey(dateStr: string = getTodayDate()): string {
+  const date = parseDate(dateStr)
+  const month = date.getMonth() + 1
+  // 月份补零，保证格式一致
+  return `${date.getFullYear()}-${String(month).padStart(2, '0')}`
+}
+
+/**
+ * 获取月份键对应的中文展示文本（如 "2026年8月"）
+ * @param monthKey - 月份键 'YYYY-MM'
+ * @returns 中文月份文本
+ */
+export function formatMonthLabel(monthKey: string): string {
+  const [yearStr, monthStr] = monthKey.split('-')
+  return `${yearStr}年${parseInt(monthStr, 10)}月`
+}
+
+/**
+ * 月份键加减月数，返回新的月份键
+ * @param monthKey - 月份键 'YYYY-MM'
+ * @param delta - 增减月数（正为后移，负为前移）
+ * @returns 新的月份键
+ */
+export function addMonths(monthKey: string, delta: number): string {
+  const [yearStr, monthStr] = monthKey.split('-')
+  const year = parseInt(yearStr, 10)
+  const month = parseInt(monthStr, 10) - 1 // 转为 0-based
+  const date = new Date(year, month + delta, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}

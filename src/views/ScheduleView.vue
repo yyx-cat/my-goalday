@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useHabitStore } from '@/store/modules/habitStore'
+import { useDiaryStore } from '@/store/modules/diaryStore'
+import { useMonthlyTaskStore } from '@/store/modules/monthlyTaskStore'
 import {
   getTodayDate,
   addDays,
@@ -11,49 +13,50 @@ import {
   getMondayOfWeek,
   getWeekNumber,
   getWeekRangeText,
+  formatMonthLabel,
 } from '@/utils/date'
 import type { Todo } from '@/types/todo'
 
 const todoStore = useTodoStore()
 const habitStore = useHabitStore()
+const diaryStore = useDiaryStore()
+const monthlyTaskStore = useMonthlyTaskStore()
 
 /**
  * 子标签类型
  */
-type SubTab = 'record' | 'list' | 'habit'
+type SubTab = 'week' | 'record' | 'list' | 'habit'
 
 /**
- * 单个日期行的数据结构（记录视图用）
+ * 单个日期行的数据结构（周视图用）
+ * @property date - 日期字符串
+ * @property dayNumber - 日期数字
+ * @property weekday - 星期几
+ * @property todos - 该天任务列表
+ * @property isToday - 是否今天
  */
 interface DayRow {
-  /** 日期字符串 YYYY-MM-DD */
   date: string
-  /** 日期数字（如 18） */
   dayNumber: number
-  /** 星期几（如 星期一） */
   weekday: string
-  /** 该天的任务列表 */
   todos: Todo[]
-  /** 是否是今天 */
   isToday: boolean
 }
 
 /**
- * 清单视图中按日期分组的任务结构
+ * 正在创建中的新任务状态
+ * @property key - 唯一标识（区分来源：date 日期 或 month 月份 或 'diary'）
+ * @property text - 输入中文本
  */
-interface TodoGroup {
-  /** 日期字符串 */
-  date: string
-  /** 中文日期展示（如 8月18日 周一） */
-  label: string
-  /** 该天任务列表 */
-  todos: Todo[]
+interface EditingTask {
+  key: string
+  text: string
 }
 
 // ========== 状态 ==========
 
-/** 当前激活的子标签（记录/清单/习惯） */
-const activeSubTab = ref<SubTab>('record')
+/** 当前激活的子标签（周/记录/清单/习惯） */
+const activeSubTab = ref<SubTab>('week')
 
 /** 当前所在周的锚定日期（默认今天） */
 const currentAnchor = ref<string>(getTodayDate())
@@ -61,23 +64,17 @@ const currentAnchor = ref<string>(getTodayDate())
 /** 周选择器下拉面板是否展开 */
 const weekDropdownOpen = ref<boolean>(false)
 
-/** 记录视图中已展开的日期集合（手风琴） */
-const expandedDates = ref<Set<string>>(new Set())
+/** 当前正在创建/编辑的新任务（null 表示无） */
+const editingTask = ref<EditingTask | null>(null)
 
-/** 记录视图中每个日期的就地输入文本 */
-const recordInputMap = ref<Record<string, string>>({})
+/** 编辑输入框的 DOM 引用 */
+const editInputRef = ref<HTMLInputElement | null>(null)
 
-/** 清单视图输入框文本 */
-const listInputText = ref<string>('')
+/** 日记编辑是否手动修改过（用于提示） */
+const diaryModified = ref<boolean>(false)
 
-/** 清单视图新任务的目标日期（默认今天） */
-const listInputDate = ref<string>(getTodayDate())
-
-/** 习惯视图新习惯名称输入 */
-const newHabitName = ref<string>('')
-
-/** 习惯视图新习惯图标（emoji） */
-const newHabitIcon = ref<string>('')
+/** 右下角清单抽屉是否展开 */
+const drawerOpen = ref<boolean>(false)
 
 // ========== 计算属性 ==========
 
@@ -90,13 +87,13 @@ const currentWeekNumber = computed<number>(() => getWeekNumber(currentAnchor.val
 /** 当前周的年份 */
 const currentYear = computed<number>(() => parseDate(getMondayOfWeek(currentAnchor.value)).getFullYear())
 
-/** 当前周的日期范围文本（如 8月17日 - 8月23日） */
+/** 当前周的日期范围文本 */
 const weekRangeText = computed<string>(() => getWeekRangeText(currentAnchor.value))
 
 /** 是否是本周 */
 const isCurrentWeek = computed<boolean>(() => getMondayOfWeek(currentAnchor.value) === getMondayOfWeek(getTodayDate()))
 
-/** 记录视图：当前周的日期行数据 */
+/** 周视图：当前周的日期行数据 */
 const dayRows = computed<DayRow[]>(() => {
   const dates = currentWeekDates.value
   const allTodos = todoStore.todos
@@ -113,181 +110,221 @@ const dayRows = computed<DayRow[]>(() => {
   })
 })
 
-/** 清单视图：所有任务按日期倒序分组 */
-const todoGroups = computed<TodoGroup[]>(() => {
-  const allTodos = todoStore.todos
-  // 收集所有出现过的日期
-  const dateSet = new Set<string>()
-  allTodos.forEach(t => dateSet.add(t.date))
-  // 倒序排列（最新在前）
-  const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a))
-  return sortedDates.map(date => {
-    const dateObj = parseDate(date)
-    const label = `${dateObj.getMonth() + 1}月${dateObj.getDate()}日 ${getWeekDay(dateObj)}`
-    return {
-      date,
-      label,
-      todos: allTodos.filter(t => t.date === date),
-    }
-  })
-})
+/** 清单视图：当前月任务列表 */
+const monthTasks = computed(() => monthlyTaskStore.monthTasks)
 
-/** 清单视图：总任务数与已完成数 */
-const listStats = computed(() => {
-  const all = todoStore.todos
-  const done = all.filter(t => t.done).length
-  return { total: all.length, done }
-})
-
-/** 习惯视图：习惯列表 */
-const habits = computed(() => habitStore.habits)
-
-/** 习惯视图：今日打卡统计 */
-const habitStats = computed(() => ({
-  done: habitStore.todayCheckInCount,
-  total: habitStore.habitsCount,
+/** 清单视图：月份统计 */
+const monthStats = computed(() => ({
+  done: monthlyTaskStore.monthDoneCount,
+  total: monthlyTaskStore.monthTotalCount,
 }))
+
+/** 清单视图：当前月份中文展示 */
+const monthLabel = computed<string>(() => formatMonthLabel(monthlyTaskStore.currentMonth))
+
+/** 清单视图：是否本月 */
+const isCurrentMonth = computed<boolean>(() => monthlyTaskStore.isCurrentMonth)
+
+/** 日记：今日字数 */
+const diaryWordCount = computed<number>(() => diaryStore.draftContent.length)
 
 // ========== 方法：周导航 ==========
 
-/**
- * 切换到上一周
- */
+/** 切换到上一周 */
 function goPrevWeek(): void {
   currentAnchor.value = addDays(currentAnchor.value, -7)
   weekDropdownOpen.value = false
 }
 
-/**
- * 切换到下一周
- */
+/** 切换到下一周 */
 function goNextWeek(): void {
   currentAnchor.value = addDays(currentAnchor.value, 7)
   weekDropdownOpen.value = false
 }
 
-/**
- * 回到本周
- */
+/** 回到本周 */
 function goThisWeek(): void {
   currentAnchor.value = getTodayDate()
   weekDropdownOpen.value = false
 }
 
-/**
- * 切换周选择器下拉面板
- */
+/** 切换周下拉面板 */
 function toggleWeekDropdown(): void {
   weekDropdownOpen.value = !weekDropdownOpen.value
+}
+
+// ========== 方法：月份导航（清单） ==========
+
+/** 清单切换到上个月 */
+function goPrevMonth(): void {
+  monthlyTaskStore.goPrevMonth()
+}
+
+/** 清单切换到下个月 */
+function goNextMonth(): void {
+  monthlyTaskStore.goNextMonth()
+}
+
+/** 清单回到本月 */
+function goThisMonth(): void {
+  monthlyTaskStore.goThisMonth()
 }
 
 // ========== 方法：子标签切换 ==========
 
 /**
- * 切换子标签
+ * 切换子标签（切换时清空正在编辑的任务）
  * @param tab - 目标子标签
  */
 function switchSubTab(tab: SubTab): void {
+  commitEditingTask()
   activeSubTab.value = tab
-}
-
-// ========== 方法：记录视图任务 ==========
-
-/**
- * 切换某日期行的展开/收起状态
- * @param date - 日期字符串
- */
-function toggleExpand(date: string): void {
-  const set = new Set(expandedDates.value)
-  if (set.has(date)) {
-    set.delete(date)
-  } else {
-    set.add(date)
+  // 切换到记录视图时加载今日日记草稿
+  if (tab === 'record') {
+    diaryStore.goToToday()
+    diaryModified.value = false
   }
-  expandedDates.value = set
 }
 
+// ========== 方法：任务创建（点击即创建 + 就地输入） ==========
+
 /**
- * 记录视图：在某天添加任务
+ * 在某天开始创建新待办任务
  * @param date - 日期字符串
  */
-function handleRecordAdd(date: string): void {
-  const text = (recordInputMap.value[date] || '').trim()
-  if (!text) return
-  todoStore.addTodo(text, date)
-  recordInputMap.value[date] = ''
+async function startEditDate(date: string): Promise<void> {
+  if (editingTask.value && editingTask.value.key !== date) {
+    commitEditingTask()
+  }
+  if (editingTask.value && editingTask.value.key === date) {
+    editInputRef.value?.focus()
+    return
+  }
+  editingTask.value = { key: date, text: '' }
+  await nextTick()
+  editInputRef.value?.focus()
 }
 
 /**
- * 切换任务完成状态
- * @param id - 任务 id
+ * 在清单开始创建新月度任务
  */
+async function startEditMonth(): Promise<void> {
+  const key = `month:${monthlyTaskStore.currentMonth}`
+  if (editingTask.value && editingTask.value.key !== key) {
+    commitEditingTask()
+  }
+  if (editingTask.value && editingTask.value.key === key) {
+    editInputRef.value?.focus()
+    return
+  }
+  editingTask.value = { key, text: '' }
+  await nextTick()
+  editInputRef.value?.focus()
+}
+
+/**
+ * 提交正在编辑的任务（回车）：有内容则按来源保存
+ */
+function commitEditingTask(): void {
+  if (!editingTask.value) return
+  const text = editingTask.value.text.trim()
+  if (text) {
+    if (editingTask.value.key.startsWith('month:')) {
+      monthlyTaskStore.addTask(text)
+    } else {
+      // 按日期创建待办
+      todoStore.addTodo(text, editingTask.value.key)
+    }
+  }
+  editingTask.value = null
+}
+
+/** 放弃正在编辑的任务（ESC） */
+function cancelEditingTask(): void {
+  editingTask.value = null
+}
+
+/** 编辑输入框失焦：空则丢弃，有内容则保存 */
+function handleEditBlur(): void {
+  if (!editingTask.value) return
+  const text = editingTask.value.text.trim()
+  if (text) {
+    if (editingTask.value.key.startsWith('month:')) {
+      monthlyTaskStore.addTask(text)
+    } else {
+      todoStore.addTodo(text, editingTask.value.key)
+    }
+  }
+  editingTask.value = null
+}
+
+/** 判断某日期是否正在创建新待办 */
+function isEditingDate(date: string): boolean {
+  return editingTask.value?.key === date
+}
+
+/** 判断清单是否正在创建新月度任务 */
+function isEditingMonth(): boolean {
+  return editingTask.value?.key === `month:${monthlyTaskStore.currentMonth}`
+}
+
+// ========== 方法：任务操作 ==========
+
+/** 切换待办完成状态 */
 function handleToggleTodo(id: string): void {
   todoStore.toggleTodo(id)
 }
 
-/**
- * 删除任务
- * @param id - 任务 id
- */
+/** 删除待办 */
 function handleDeleteTodo(id: string): void {
   todoStore.deleteTodo(id)
 }
 
-// ========== 方法：清单视图 ==========
-
-/**
- * 清单视图：添加任务（关联 listInputDate）
- */
-function handleListAdd(): void {
-  const text = listInputText.value.trim()
-  if (!text) return
-  todoStore.addTodo(text, listInputDate.value)
-  listInputText.value = ''
+/** 切换月度任务完成状态 */
+function handleToggleMonthTask(id: string): void {
+  monthlyTaskStore.toggleTask(id)
 }
 
-// ========== 方法：习惯视图 ==========
-
-/**
- * 创建新习惯
- */
-function handleCreateHabit(): void {
-  const name = newHabitName.value.trim()
-  if (!name) return
-  habitStore.createHabit(name, newHabitIcon.value || undefined)
-  newHabitName.value = ''
-  newHabitIcon.value = ''
+/** 删除月度任务 */
+function handleDeleteMonthTask(id: string): void {
+  monthlyTaskStore.deleteTask(id)
 }
 
-/**
- * 切换习惯今日打卡状态
- * @param habitId - 习惯 id
- */
-function handleToggleHabit(habitId: string): void {
-  habitStore.toggleCheckIn(habitId, getTodayDate())
-}
+// ========== 方法：日记 ==========
 
 /**
- * 删除习惯
- * @param habitId - 习惯 id
+ * 日记输入变更（标记已修改）
  */
-function handleDeleteHabit(habitId: string): void {
-  habitStore.deleteHabit(habitId)
+function onDiaryInput(): void {
+  diaryModified.value = true
 }
 
-/**
- * 判断习惯今日是否已打卡
- * @param habitId - 习惯 id
- * @returns 是否已打卡
- */
-function isHabitCheckedToday(habitId: string): boolean {
-  return habitStore.isCheckedIn(habitId, getTodayDate())
+/** 保存当前日记 */
+function handleSaveDiary(): void {
+  diaryStore.saveCurrentDiary()
+  diaryModified.value = false
+}
+
+/** 删除当前日记 */
+function handleDeleteDiary(): void {
+  diaryStore.deleteCurrentDiary()
+  diaryModified.value = false
+}
+
+// ========== 方法：清单抽屉 ==========
+
+/** 切换右下角清单抽屉 */
+function toggleDrawer(): void {
+  commitEditingTask()
+  drawerOpen.value = !drawerOpen.value
 }
 
 // 组件挂载时加载数据
 onMounted(() => {
   todoStore.loadTodos()
   habitStore.loadHabits()
+  diaryStore.loadDiaries()
+  monthlyTaskStore.loadTasks()
 })
 </script>
 
@@ -296,38 +333,30 @@ onMounted(() => {
     <!-- 顶部导航栏（藕灰背景） -->
     <header class="top-nav">
       <div class="nav-content">
-        <!-- 左侧：周选择器 -->
-        <button class="week-selector" @click="toggleWeekDropdown">
+        <!-- 左侧：周选择器（仅在周视图显示） -->
+        <button v-if="activeSubTab === 'week'" class="week-selector" @click="toggleWeekDropdown">
           <span class="week-text">第 {{ currentWeekNumber }} 周</span>
           <svg class="dropdown-arrow" :class="{ open: weekDropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
+        <!-- 其他视图显示对应标题 -->
+        <span v-else class="week-text">{{ activeSubTab === 'record' ? '今日记录' : activeSubTab === 'list' ? '月度清单' : '习惯' }}</span>
 
-        <!-- 右侧：子标签 记录 | 清单 | 习惯 -->
+        <!-- 右侧：四个子标签 -->
         <nav class="sub-tabs">
-          <button
-            class="sub-tab"
-            :class="{ active: activeSubTab === 'record' }"
-            @click="switchSubTab('record')"
-          >记录</button>
+          <button class="sub-tab" :class="{ active: activeSubTab === 'week' }" @click="switchSubTab('week')">周</button>
           <span class="tab-divider">|</span>
-          <button
-            class="sub-tab"
-            :class="{ active: activeSubTab === 'list' }"
-            @click="switchSubTab('list')"
-          >清单</button>
+          <button class="sub-tab" :class="{ active: activeSubTab === 'record' }" @click="switchSubTab('record')">记录</button>
           <span class="tab-divider">|</span>
-          <button
-            class="sub-tab"
-            :class="{ active: activeSubTab === 'habit' }"
-            @click="switchSubTab('habit')"
-          >习惯</button>
+          <button class="sub-tab" :class="{ active: activeSubTab === 'list' }" @click="switchSubTab('list')">清单</button>
+          <span class="tab-divider">|</span>
+          <button class="sub-tab" :class="{ active: activeSubTab === 'habit' }" @click="switchSubTab('habit')">习惯</button>
         </nav>
       </div>
 
       <!-- 周选择器下拉面板 -->
-      <div v-if="weekDropdownOpen" class="week-dropdown">
+      <div v-if="weekDropdownOpen && activeSubTab === 'week'" class="week-dropdown">
         <div class="dropdown-header">
           <span>{{ currentYear }}年 第 {{ currentWeekNumber }} 周</span>
           <span class="dropdown-range">{{ weekRangeText }}</span>
@@ -340,160 +369,222 @@ onMounted(() => {
       </div>
     </header>
 
-    <!-- 主内容区（三视图切换） -->
+    <!-- 主内容区（四视图切换） -->
     <div class="main-body">
-      <!-- ========== 记录视图：日期列表行 ========== -->
-      <div v-show="activeSubTab === 'record'" class="view-record">
+      <!-- ========== 周视图：日期 + 待办（全部展开不折叠） ========== -->
+      <div v-show="activeSubTab === 'week'" class="view-week">
         <div
           v-for="row in dayRows"
           :key="row.date"
-          class="daily-item"
-          :class="{ today: row.isToday, expanded: expandedDates.has(row.date) }"
+          class="day-block"
+          :class="{ today: row.isToday }"
         >
-          <!-- 日期行（点击展开） -->
-          <div class="item-row" @click="toggleExpand(row.date)">
-            <!-- 日期块：数字 + 短横线 + 周几 -->
+          <!-- 日期标题行 -->
+          <div class="day-header">
             <div class="date-block">
               <span class="day-number">{{ row.dayNumber }}</span>
               <div class="separator-line"></div>
               <span class="day-of-week">{{ row.weekday }}</span>
             </div>
-
-            <!-- 右侧：任务统计 + 展开箭头 -->
-            <div class="item-right">
-              <span v-if="row.todos.length > 0" class="item-count">
-                {{ row.todos.filter(t => t.done).length }}/{{ row.todos.length }}
-              </span>
-              <!-- 悬浮按钮（展开时显示，左箭头收起） -->
-              <button
-                v-if="expandedDates.has(row.date)"
-                class="floating-btn"
-                @click.stop="toggleExpand(row.date)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-              <svg v-else class="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 6 15 12 9 18" />
-              </svg>
-            </div>
+            <span v-if="row.todos.length > 0" class="day-count">
+              {{ row.todos.filter(t => t.done).length }}/{{ row.todos.length }}
+            </span>
+            <span v-else-if="row.isToday" class="today-tag">今天</span>
           </div>
 
-          <!-- 展开内容：当天任务列表 + 输入框 -->
-          <div v-if="expandedDates.has(row.date)" class="expanded-content">
+          <!-- 任务列表（全部展开，点击空白处创建） -->
+          <div class="day-todos" @click="startEditDate(row.date)">
             <div
               v-for="todo in row.todos"
               :key="todo.id"
               class="todo-item"
               :class="{ completed: todo.done }"
+              @click.stop
             >
-              <button class="check-btn" @click="handleToggleTodo(todo.id)">
-                {{ todo.done ? '☑' : '☐' }}
-              </button>
+              <button class="todo-dot" :class="{ filled: todo.done }" @click="handleToggleTodo(todo.id)"></button>
               <span class="todo-text">{{ todo.text }}</span>
               <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
             </div>
 
-            <div v-if="row.todos.length === 0" class="empty-tip">✨ 这天还没有待办</div>
+            <!-- 正在创建的新任务 -->
+            <div v-if="isEditingDate(row.date)" class="todo-item editing" @click.stop>
+              <span class="todo-dot"></span>
+              <input
+                ref="editInputRef"
+                v-model="editingTask!.text"
+                @keyup.enter="commitEditingTask"
+                @keyup.esc="cancelEditingTask"
+                @blur="handleEditBlur"
+                placeholder="写待办..."
+                class="edit-input"
+              />
+            </div>
 
-            <!-- 就地输入框 -->
+            <!-- 空提示 -->
+            <div v-if="row.todos.length === 0 && !isEditingDate(row.date)" class="empty-tip">
+              点击此处创建任务
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== 记录视图：纯日记 ========== -->
+      <div v-show="activeSubTab === 'record'" class="view-record">
+        <!-- 日期导航 -->
+        <div class="diary-nav">
+          <button class="diary-nav-btn" @click="diaryStore.navigateDate('prev')">‹</button>
+          <span class="diary-date">{{ diaryStore.currentDate }}</span>
+          <button class="diary-nav-btn" @click="diaryStore.navigateDate('next')">›</button>
+          <button v-if="diaryStore.currentDate !== getTodayDate()" class="diary-today-btn" @click="diaryStore.goToToday()">今天</button>
+        </div>
+
+        <!-- 日记编辑区 -->
+        <textarea
+          v-model="diaryStore.draftContent"
+          @input="onDiaryInput"
+          placeholder="✍️ 写下今日想法..."
+          class="diary-textarea"
+        ></textarea>
+
+        <!-- 字数与操作 -->
+        <div class="diary-footer">
+          <span class="word-count">{{ diaryWordCount }} 字</span>
+          <div class="diary-actions">
+            <button v-if="diaryStore.hasCurrentDiary" class="diary-action-btn danger" @click="handleDeleteDiary">删除</button>
+            <button class="diary-action-btn" :class="{ modified: diaryModified }" @click="handleSaveDiary">保存</button>
+          </div>
+        </div>
+        <!-- 保存提示 -->
+        <Transition name="toast">
+          <div v-if="diaryStore.savedHint" class="diary-hint">{{ diaryStore.savedHint }}</div>
+        </Transition>
+      </div>
+
+      <!-- ========== 清单视图：月度任务 ========== -->
+      <div v-show="activeSubTab === 'list'" class="view-list">
+        <!-- 月份导航 -->
+        <div class="month-nav">
+          <button class="month-nav-btn" @click="goPrevMonth">‹</button>
+          <div class="month-center">
+            <span class="month-label">{{ monthLabel }}</span>
+            <span class="month-stats">{{ monthStats.done }}/{{ monthStats.total }}</span>
+          </div>
+          <button class="month-nav-btn" @click="goNextMonth">›</button>
+          <button v-if="!isCurrentMonth" class="month-today-btn" @click="goThisMonth">本月</button>
+        </div>
+
+        <!-- 月度任务列表（点击空白创建） -->
+        <div class="month-tasks" @click="startEditMonth">
+          <div
+            v-for="task in monthTasks"
+            :key="task.id"
+            class="todo-item"
+            :class="{ completed: task.done }"
+            @click.stop
+          >
+            <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
+            <span class="todo-text">{{ task.text }}</span>
+            <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
+          </div>
+
+          <!-- 正在创建的新月度任务 -->
+          <div v-if="isEditingMonth()" class="todo-item editing" @click.stop>
+            <span class="todo-dot"></span>
             <input
-              :value="recordInputMap[row.date] || ''"
-              @input="recordInputMap[row.date] = ($event.target as HTMLInputElement).value"
-              @keyup.enter="handleRecordAdd(row.date)"
-              placeholder="✍️ 写待办..."
-              class="inline-input"
+              ref="editInputRef"
+              v-model="editingTask!.text"
+              @keyup.enter="commitEditingTask"
+              @keyup.esc="cancelEditingTask"
+              @blur="handleEditBlur"
+              placeholder="写月度任务..."
+              class="edit-input"
             />
           </div>
-        </div>
-      </div>
 
-      <!-- ========== 清单视图：所有任务汇总 ========== -->
-      <div v-show="activeSubTab === 'list'" class="view-list">
-        <!-- 顶部统计 + 添加 -->
-        <div class="list-header">
-          <span class="list-stats">已完成 {{ listStats.done }}/{{ listStats.total }}</span>
-        </div>
-
-        <!-- 添加任务输入区 -->
-        <div class="list-add-area">
-          <input
-            v-model="listInputDate"
-            type="date"
-            class="date-picker"
-          />
-          <input
-            v-model="listInputText"
-            @keyup.enter="handleListAdd"
-            placeholder="✍️ 写待办..."
-            class="inline-input"
-          />
-        </div>
-
-        <!-- 分组任务列表 -->
-        <div v-if="todoGroups.length > 0">
-          <div v-for="group in todoGroups" :key="group.date" class="todo-group">
-            <div class="group-header">{{ group.label }}</div>
-            <div
-              v-for="todo in group.todos"
-              :key="todo.id"
-              class="todo-item"
-              :class="{ completed: todo.done }"
-            >
-              <button class="check-btn" @click="handleToggleTodo(todo.id)">
-                {{ todo.done ? '☑' : '☐' }}
-              </button>
-              <span class="todo-text">{{ todo.text }}</span>
-              <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
-            </div>
+          <!-- 空状态 -->
+          <div v-if="monthTasks.length === 0 && !isEditingMonth()" class="empty-tip">
+            点击此处创建月度任务
           </div>
         </div>
-
-        <div v-else class="empty-state">✨ 还没有待办，写一件小目标吧</div>
       </div>
 
-      <!-- ========== 习惯视图：习惯打卡 ========== -->
+      <!-- ========== 习惯视图：空开占位 ========== -->
       <div v-show="activeSubTab === 'habit'" class="view-habit">
-        <!-- 今日打卡统计 -->
-        <div class="habit-stats">
-          今日已打卡 {{ habitStats.done }}/{{ habitStats.total }}
+        <div class="habit-placeholder">
+          <span class="habit-icon">🎯</span>
+          <p class="habit-title">习惯功能即将上线</p>
+          <p class="habit-desc">这里将用于习惯打卡与统计</p>
         </div>
-
-        <!-- 添加新习惯 -->
-        <div class="habit-add-area">
-          <input
-            v-model="newHabitIcon"
-            placeholder="🎯"
-            class="habit-icon-input"
-            maxlength="2"
-          />
-          <input
-            v-model="newHabitName"
-            @keyup.enter="handleCreateHabit"
-            placeholder="✍️ 新习惯名称..."
-            class="inline-input habit-name-input"
-          />
-        </div>
-
-        <!-- 习惯列表 -->
-        <div v-if="habits.length > 0" class="habit-list">
-          <div v-for="habit in habits" :key="habit.id" class="habit-item">
-            <button
-              class="habit-check"
-              :class="{ checked: isHabitCheckedToday(habit.id) }"
-              @click="handleToggleHabit(habit.id)"
-            >
-              {{ isHabitCheckedToday(habit.id) ? '✓' : habit.icon || '○' }}
-            </button>
-            <span class="habit-name">{{ habit.name }}</span>
-            <button class="delete-btn" @click="handleDeleteHabit(habit.id)">✕</button>
-          </div>
-        </div>
-
-        <div v-else class="empty-state">✨ 还没有习惯，添加一个开始打卡吧</div>
       </div>
     </div>
+
+    <!-- 右下角折叠箭头：展开清单抽屉 -->
+    <button
+      class="drawer-toggle"
+      :class="{ open: drawerOpen }"
+      @click="toggleDrawer"
+      :aria-label="drawerOpen ? '收起清单' : '展开清单'"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline v-if="drawerOpen" points="9 6 15 12 9 18" />
+        <polyline v-else points="15 6 9 12 15 18" />
+      </svg>
+    </button>
+
+    <!-- 清单抽屉（右侧滑出） -->
+    <Teleport to="body">
+      <Transition name="drawer-mask">
+        <div v-if="drawerOpen" class="drawer-mask" @click="toggleDrawer"></div>
+      </Transition>
+      <Transition name="drawer-panel">
+        <aside v-if="drawerOpen" class="drawer-panel">
+          <!-- 抽屉头部 -->
+          <div class="drawer-header">
+            <div class="drawer-month-nav">
+              <button class="drawer-nav-btn" @click="goPrevMonth">‹</button>
+              <span class="drawer-month-label">{{ monthLabel }}</span>
+              <button class="drawer-nav-btn" @click="goNextMonth">›</button>
+            </div>
+            <button class="drawer-close" @click="toggleDrawer">✕</button>
+          </div>
+
+          <!-- 抽屉统计 -->
+          <div class="drawer-stats">已完成 {{ monthStats.done }}/{{ monthStats.total }}</div>
+
+          <!-- 抽屉任务列表 -->
+          <div class="drawer-tasks" @click="startEditMonth">
+            <div
+              v-for="task in monthTasks"
+              :key="task.id"
+              class="todo-item"
+              :class="{ completed: task.done }"
+              @click.stop
+            >
+              <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
+              <span class="todo-text">{{ task.text }}</span>
+              <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
+            </div>
+
+            <div v-if="isEditingMonth()" class="todo-item editing" @click.stop>
+              <span class="todo-dot"></span>
+              <input
+                ref="editInputRef"
+                v-model="editingTask!.text"
+                @keyup.enter="commitEditingTask"
+                @keyup.esc="cancelEditingTask"
+                @blur="handleEditBlur"
+                placeholder="写月度任务..."
+                class="edit-input"
+              />
+            </div>
+
+            <div v-if="monthTasks.length === 0 && !isEditingMonth()" class="empty-tip">
+              点击此处创建月度任务
+            </div>
+          </div>
+        </aside>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -508,6 +599,7 @@ onMounted(() => {
   flex-direction: column;
   overflow: hidden;
   font-family: var(--font-family-sans);
+  position: relative;
 }
 
 /* ========== 顶部导航栏 ========== */
@@ -522,7 +614,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 60px;
+  height: 56px;
   padding: 0 16px;
 }
 
@@ -536,9 +628,13 @@ onMounted(() => {
   cursor: pointer;
   font-family: var(--font-family-sans);
   color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: var(--font-weight-medium);
   padding: 0;
+}
+
+.week-text {
+  font-size: 15px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
 }
 
 .dropdown-arrow {
@@ -555,7 +651,7 @@ onMounted(() => {
 .sub-tabs {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .sub-tab {
@@ -644,34 +740,23 @@ onMounted(() => {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ========== 记录视图：日期列表行 ========== */
-.daily-item {
-  display: flex;
-  flex-direction: column;
+/* ========== 周视图：日期块（全部展开） ========== */
+.day-block {
   border-bottom: 1px solid var(--color-border-divider);
   background: var(--color-bg-main);
 }
 
-.daily-item.today {
+.day-block.today {
   background: #fff;
 }
 
-.daily-item.expanded {
-  border-bottom: none;
-}
-
-/* 日期行 */
-.item-row {
+.day-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: 100%;
-  min-height: 80px;
-  padding: 0 20px;
-  cursor: pointer;
+  padding: 12px 20px 4px;
 }
 
-/* 日期块：数字 + 短横线 + 周几 */
 .date-block {
   display: flex;
   flex-direction: column;
@@ -695,65 +780,34 @@ onMounted(() => {
 
 .day-of-week {
   font-size: 12px;
-  font-weight: var(--font-weight-normal);
   color: var(--color-text-secondary);
 }
 
-/* 行右侧 */
-.item-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.item-count {
+.day-count {
   font-size: 13px;
   color: var(--color-text-secondary);
-  font-weight: var(--font-weight-normal);
 }
 
-.chevron-right {
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-tertiary);
+.today-tag {
+  padding: 2px 10px;
+  background: var(--color-text-primary);
+  color: var(--color-bg-main);
+  font-size: 11px;
+  border-radius: 10px;
 }
 
-/* 悬浮按钮（展开时显示） */
-.floating-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-surface);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-text-primary);
-  padding: 0;
-}
-
-.floating-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* 展开内容 */
-.expanded-content {
-  padding: 8px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: #fff;
-  border-bottom: 1px solid var(--color-border-divider);
+/* 任务列表容器 */
+.day-todos {
+  padding: 4px 20px 12px;
+  cursor: text;
 }
 
 /* ========== 通用任务项 ========== */
 .todo-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 0;
+  gap: 12px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--color-border-divider);
 }
 
@@ -761,23 +815,31 @@ onMounted(() => {
   border-bottom: none;
 }
 
-.todo-item.completed {
-  opacity: 0.5;
+.todo-item.completed .todo-text {
+  color: var(--color-text-tertiary);
+  opacity: 0.55;
 }
 
-.check-btn {
-  width: 22px;
-  height: 22px;
-  border: none;
+/* 圆点 */
+.todo-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-text-primary);
   background: transparent;
-  font-size: 18px;
-  color: var(--color-text-primary);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 0;
   flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.todo-dot.filled {
+  background: var(--color-bg-surface);
+}
+
+.todo-item.editing .todo-dot {
+  border-style: dashed;
+  border-color: var(--color-text-tertiary);
 }
 
 .todo-text {
@@ -788,9 +850,19 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-.todo-item.completed .todo-text {
-  text-decoration: line-through;
-  color: var(--color-text-secondary);
+.edit-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  outline: none;
+  padding: 0;
+}
+
+.edit-input::placeholder {
+  color: var(--color-text-tertiary);
 }
 
 .delete-btn {
@@ -807,212 +879,435 @@ onMounted(() => {
   padding: 0;
   border-radius: var(--radius-full);
   flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.todo-item:hover .delete-btn {
+  opacity: 1;
 }
 
 .delete-btn:hover {
-  color: #BF7575;
+  color: #BF6060;
 }
 
-/* 就地输入框 */
-.inline-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border-divider);
-  border-radius: 6px;
-  background: var(--color-bg-main);
-  font-family: var(--font-family-sans);
-  font-size: 14px;
-  color: var(--color-text-primary);
-  outline: none;
-  box-sizing: border-box;
-  margin-top: 4px;
-  transition: border-color 0.2s;
-}
-
-.inline-input:focus {
-  border-color: var(--color-text-secondary);
-}
-
-.inline-input::placeholder {
-  color: var(--color-text-tertiary);
-}
-
-/* 空状态 */
 .empty-tip {
   text-align: center;
-  padding: 8px;
+  padding: 12px 8px;
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 48px 20px;
-  color: var(--color-text-tertiary);
-  font-size: 14px;
-}
-
-/* ========== 清单视图 ========== */
-.view-list {
-  padding-bottom: 20px;
-}
-
-.list-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-divider);
-}
-
-.list-stats {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-}
-
-.list-add-area {
+/* ========== 记录视图：日记 ========== */
+.view-record {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--color-border-divider);
+  height: 100%;
+  padding: 0 16px 16px;
+  box-sizing: border-box;
 }
 
-.date-picker {
-  padding: 8px 12px;
-  border: 1px solid var(--color-border-divider);
-  border-radius: 6px;
-  background: var(--color-bg-main);
-  font-family: var(--font-family-sans);
-  font-size: 14px;
-  color: var(--color-text-primary);
-  outline: none;
-}
-
-.list-add-area .inline-input {
-  margin-top: 0;
-}
-
-.todo-group {
-  padding: 0 20px;
-}
-
-.group-header {
-  padding: 12px 0 4px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-medium);
-}
-
-/* ========== 习惯视图 ========== */
-.view-habit {
-  padding-bottom: 20px;
-}
-
-.habit-stats {
-  padding: 16px 20px;
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border-divider);
-}
-
-.habit-add-area {
-  display: flex;
-  gap: 8px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--color-border-divider);
-}
-
-.habit-icon-input {
-  width: 48px;
-  padding: 8px;
-  border: 1px solid var(--color-border-divider);
-  border-radius: 6px;
-  background: var(--color-bg-main);
-  font-family: var(--font-family-sans);
-  font-size: 18px;
-  text-align: center;
-  color: var(--color-text-primary);
-  outline: none;
-}
-
-.habit-name-input {
-  flex: 1;
-  margin-top: 0;
-}
-
-.habit-list {
-  padding: 0 20px;
-}
-
-.habit-item {
+.diary-nav {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 0;
+}
+
+.diary-nav-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.diary-date {
+  flex: 1;
+  text-align: center;
+  font-size: 15px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.diary-today-btn {
+  padding: 4px 14px;
+  border: 1px solid var(--color-text-primary);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+}
+
+.diary-textarea {
+  flex: 1;
+  width: 100%;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+  font-family: var(--font-family-sans);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-text-primary);
+  outline: none;
+  resize: none;
+  min-height: 200px;
+  box-sizing: border-box;
+}
+
+.diary-textarea::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.diary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 4px 0;
+}
+
+.word-count {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.diary-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.diary-action-btn {
+  padding: 8px 18px;
+  border: 1px solid var(--color-text-primary);
+  border-radius: 8px;
+  background: var(--color-text-primary);
+  color: var(--color-bg-main);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.diary-action-btn.modified {
+  opacity: 1;
+}
+
+.diary-action-btn.danger {
+  background: transparent;
+  color: #BF6060;
+  border-color: #BF6060;
+  opacity: 0.8;
+}
+
+.diary-hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+}
+
+/* ========== 清单视图：月度任务 ========== */
+.view-list {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 20px;
+}
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--color-border-divider);
 }
 
-.habit-item:last-child {
-  border-bottom: none;
-}
-
-.habit-check {
+.month-nav-btn {
   width: 32px;
   height: 32px;
-  border: 1.5px solid var(--color-border-divider);
+  border: 1px solid var(--color-border-divider);
   border-radius: var(--radius-full);
-  background: transparent;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 16px;
   cursor: pointer;
+  padding: 0;
+}
+
+.month-center {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: center;
+}
+
+.month-label {
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.month-stats {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.month-today-btn {
+  padding: 4px 14px;
+  border: 1px solid var(--color-text-primary);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+}
+
+.month-tasks {
+  padding: 4px 20px;
+  cursor: text;
+}
+
+/* ========== 习惯视图：占位 ========== */
+.view-habit {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  height: 100%;
+  min-height: 300px;
+}
+
+.habit-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.habit-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.habit-title {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.habit-desc {
+  margin: 0;
+  font-size: 13px;
   color: var(--color-text-tertiary);
-  padding: 0;
-  flex-shrink: 0;
-  transition: all 0.2s;
 }
 
-.habit-check.checked {
-  border-color: var(--color-text-primary);
+/* ========== 右下角抽屉切换按钮 ========== */
+.drawer-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 76px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
   background: var(--color-text-primary);
-  color: #fff;
+  color: var(--color-bg-main);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+  padding: 0;
 }
 
-.habit-name {
-  flex: 1;
-  font-size: 14px;
+.drawer-toggle:hover {
+  transform: scale(1.05);
+}
+
+.drawer-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ========== 清单抽屉 ========== */
+.drawer-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 80%;
+  max-width: 360px;
+  height: 100vh;
+  background: var(--color-bg-main);
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+}
+
+.drawer-mask-enter-active,
+.drawer-mask-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.drawer-mask-enter-from,
+.drawer-mask-leave-to {
+  opacity: 0;
+}
+
+.drawer-panel-enter-active,
+.drawer-panel-leave-active {
+  transition: transform 0.25s ease;
+}
+
+.drawer-panel-enter-from,
+.drawer-panel-leave-to {
+  transform: translateX(100%);
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.drawer-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drawer-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-main);
   color: var(--color-text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.drawer-month-label {
+  font-size: 15px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.drawer-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.drawer-stats {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.drawer-tasks {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px;
+  cursor: text;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 640px) {
   .nav-content {
-    height: 56px;
+    height: 52px;
     padding: 0 14px;
   }
 
   .week-text {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .sub-tabs {
-    gap: 12px;
+    gap: 10px;
   }
 
   .sub-tab {
     font-size: 13px;
   }
 
-  .item-row {
-    min-height: 72px;
-    padding: 0 16px;
+  .day-header {
+    padding: 10px 16px 4px;
+  }
+
+  .day-todos {
+    padding: 4px 16px 10px;
   }
 
   .day-number {
     font-size: 18px;
   }
 
-  .expanded-content {
-    padding: 8px 16px 14px;
+  .month-nav {
+    padding: 10px 16px;
+  }
+
+  .month-tasks {
+    padding: 4px 16px;
+  }
+
+  .delete-btn {
+    opacity: 0.4;
+  }
+
+  .drawer-toggle {
+    bottom: 72px;
+    right: 12px;
   }
 }
 </style>
