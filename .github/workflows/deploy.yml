@@ -1,21 +1,17 @@
-# 给这个工作流起个名字
 name: Deploy to GitHub Pages
 
-# 触发条件：什么时候执行
 on:
-  # 当代码推送到 main 分支时自动执行
   push:
     branches: [ "main" ]
-  # 也支持在 GitHub 网页端手动点击执行（方便调试）
   workflow_dispatch:
 
-# 任务内容
+# 为整个工作流设置权限
+permissions:
+  contents: write   # <-- 关键：授予写入内容的权限
+
 jobs:
   deploy:
-    # 运行环境：使用 Ubuntu 系统
     runs-on: ubuntu-latest
-
-    # 具体步骤
     steps:
       # 步骤 1：拉取你仓库的最新代码
       - name: Checkout code
