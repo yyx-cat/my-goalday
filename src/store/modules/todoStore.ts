@@ -1,8 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo } from '@/types/todo'
+import type { WeekViewData, DayItem } from '@/types/notebook'
 import { getTodos, saveTodos, addTodo as storageAddTodo } from '@/utils/storage'
-import { getTodayDate, addDays } from '@/utils/date'
+import {
+  getTodayDate,
+  addDays,
+  parseDate,
+  getWeekDay,
+  getWeekNumber,
+  getWeekStart,
+  getWeekEnd,
+  getWeekDateRange,
+} from '@/utils/date'
 
 /**
  * 待办事项状态管理 Store
@@ -166,6 +176,81 @@ export const useTodoStore = defineStore('todo', () => {
     return result
   }
 
+  // ========== 方法：手账周/日视图 ==========
+
+  /**
+   * 获取某天所在周的 7 天日期（周一到周日）
+   * 与 getWeekDateRange 语义一致，提供给调用方更清晰的方法名
+   * @param date - 日期字符串
+   * @returns 周一到周日的 7 个日期字符串
+   */
+  function getWeekDatesFromDate(date: string): string[] {
+    return getWeekDateRange(date)
+  }
+
+  /**
+   * 获取指定日期范围内的所有任务，按日期分组
+   * 起止日期均为闭区间（包含）
+   * @param startDate - 起始日期
+   * @param endDate - 结束日期
+   * @returns 以日期为 key 的分组任务对象
+   */
+  function getTodosByDateRange(startDate: string, endDate: string): Record<string, Todo[]> {
+    const start = startDate < endDate ? startDate : endDate
+    const end = startDate < endDate ? endDate : startDate
+    const result: Record<string, Todo[]> = {}
+    todos.value.forEach(todo => {
+      if (todo.date >= start && todo.date <= end) {
+        if (!result[todo.date]) {
+          result[todo.date] = []
+        }
+        result[todo.date].push(todo)
+      }
+    })
+    return result
+  }
+
+  /**
+   * 获取某周的完整视图数据（周视图用）
+   * @param date - 任意日期字符串
+   * @returns WeekViewData 对象
+   */
+  function getWeekViewData(date: string): WeekViewData {
+    const weekDates = getWeekDatesFromDate(date)
+    const weekStart = getWeekStart(date)
+    const weekEnd = getWeekEnd(date)
+    const weekNumber = getWeekNumber(date)
+    const startObj = parseDate(weekStart)
+    const todosByDate = getTodosByDateRange(weekStart, weekEnd)
+
+    const days: DayItem[] = weekDates.map(d => {
+      const dateObj = parseDate(d)
+      const dayTodos = todosByDate[d] || []
+      const doneCount = dayTodos.filter(t => t.done).length
+      const totalCount = dayTodos.length
+      const progress = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100)
+      return {
+        date: d,
+        weekday: getWeekDay(dateObj),
+        dayNumber: dateObj.getDate(),
+        todos: dayTodos,
+        doneCount,
+        totalCount,
+        progress,
+        isToday: d === getTodayDate(),
+      }
+    })
+
+    return {
+      year: startObj.getFullYear(),
+      month: startObj.getMonth() + 1,
+      weekNumber,
+      weekStart,
+      weekEnd,
+      days,
+    }
+  }
+
   return {
     // 状态
     todos,
@@ -190,5 +275,9 @@ export const useTodoStore = defineStore('todo', () => {
     getDateProgress,
     // 方法（支持日期范围）
     getRecentDates,
+    // 方法（手账周/日视图）
+    getWeekDatesFromDate,
+    getTodosByDateRange,
+    getWeekViewData,
   }
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, provide } from 'vue'
 import ScheduleView from '@/views/ScheduleView.vue'
 import NotebookView from '@/views/NotebookView.vue'
 import ProfileView from '@/views/ProfileView.vue'
@@ -40,8 +40,36 @@ const tabs: TabItem[] = [
   },
 ]
 
-// 当前激活的 Tab（默认「日程」）
+/**
+ * 当前激活的 Tab（默认「日程」）
+ */
 const activeTab = ref<TabItem['key']>('schedule')
+
+/**
+ * 是否隐藏全局底部 Tab 栏（手账页进入 week/day 状态后独立显示自己的底部栏）
+ */
+const hideGlobalTabBar = ref<boolean>(false)
+
+/**
+ * 切换全局 Tab（由子组件 emit 触发，如手账页空状态引导跳「日程」）
+ * @param tab - 目标 Tab 标识
+ */
+function switchActiveTab(tab: TabItem['key']): void {
+  activeTab.value = tab
+}
+
+/**
+ * 设置全局底部 Tab 栏的显示/隐藏
+ * @param hidden - true 表示隐藏（手账页自绘底部栏）
+ */
+function setGlobalTabBarHidden(hidden: boolean): void {
+  hideGlobalTabBar.value = hidden
+}
+
+// 将父组件方法通过 provide 下发给子视图，避免多级 emit
+provide<(tab: TabItem['key']) => void>('switchTab', switchActiveTab)
+provide<(hidden: boolean) => void>('setTabBarHidden', setGlobalTabBarHidden)
+provide<() => TabItem['key']>('getActiveTab', () => activeTab.value)
 </script>
 
 <template>
@@ -61,7 +89,8 @@ const activeTab = ref<TabItem['key']>('schedule')
     </main>
 
     <!-- 底部固定 Tab 栏（藕灰背景 + 线条图标） -->
-    <nav class="tab-bar">
+    <!-- 手账页进入 week/day 后独立自绘底部栏，此时隐藏全局 Tab 栏 -->
+    <nav v-show="!hideGlobalTabBar" class="tab-bar">
       <button
         v-for="tab in tabs"
         :key="tab.key"

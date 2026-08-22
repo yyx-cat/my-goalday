@@ -203,3 +203,39 @@ export function addMonths(monthKey: string, delta: number): string {
   const date = new Date(year, month + delta, 1)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
+
+/**
+ * 获取某天所在周的周一日期（等价于 getMondayOfWeek 的语义别名）
+ * @param dateStr - 任意日期字符串（可选，默认今天）
+ * @returns 本周周一的日期字符串
+ */
+export function getWeekStart(dateStr: string = getTodayDate()): string {
+  return getMondayOfWeek(dateStr)
+}
+
+/**
+ * 获取某天所在周的周日日期
+ * @param dateStr - 任意日期字符串（可选，默认今天）
+ * @returns 本周周日的日期字符串
+ */
+export function getWeekEnd(dateStr: string = getTodayDate()): string {
+  return addDays(getMondayOfWeek(dateStr), 6)
+}
+
+/**
+ * 获取某周的全部 7 天日期（语义别名 getWeekDates）
+ * @param dateStr - 任意日期字符串（可选，默认今天）
+ * @returns 周一到周日的 7 个日期字符串数组
+ */
+export function getWeekDateRange(dateStr: string = getTodayDate()): string[] {
+  return getWeekDates(dateStr)
+}
+
+/**
+ * 判断某天是否是今天
+ * @param dateStr - 日期字符串
+ * @returns 是否为今天
+ */
+export function isToday(dateStr: string): boolean {
+  return dateStr === getTodayDate()
+}
