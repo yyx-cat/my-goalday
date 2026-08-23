@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
+import { useDiaryStore } from '@/store/modules/diaryStore'
 import { parseDate, getWeekDay, isToday } from '@/utils/date'
 import type { Todo } from '@/types/todo'
 import type { BookPage } from '@/types/notebook'
@@ -20,6 +21,9 @@ import type { BookPage } from '@/types/notebook'
  * @property weekNumber - 总览页的周数
  * @property overviewProgress - 总览页本周完成率
  * @property overviewDays - 总览页 7 天数据
+ * @property hasDiary       - 该日是否有日记内容
+ * @property diaryContent   - 日记正文（hasDiary 为 true 时有效）
+ * @property diaryMood      - 日记心情表情（可选）
  */
 interface PageSideData {
   kind: 'cover' | 'overview' | 'day'
@@ -42,6 +46,22 @@ interface PageSideData {
     progress: number
     isToday: boolean
   }[]
+  hasDiary: boolean
+  diaryContent: string
+  diaryMood: string
+}
+
+/**
+ * 心情表情映射：把 Mood 字符串转成可读表情
+ * 没有匹配的返回空字符串（不显示心情标识）
+ */
+const MOOD_EMOJI_MAP: Record<string, string> = {
+  happy: '😊',
+  smile: '🙂',
+  calm: '😌',
+  sad: '😢',
+  angry: '😠',
+  tired: '😴',
 }
 
 /**
@@ -56,11 +76,12 @@ interface Props {
 const props = defineProps<Props>()
 
 const todoStore = useTodoStore()
+const diaryStore = useDiaryStore()
 
 /**
  * 构建某一天的渲染数据
  * @param date - 日期字符串
- * @returns 单日渲染数据
+ * @returns 单日渲染数据（含日记信息）
  */
 function buildDayData(date: string) {
   const todos = todoStore.getTodosByDate(date)
@@ -68,6 +89,13 @@ function buildDayData(date: string) {
   const doneCount = todos.filter(t => t.done).length
   const progress = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100)
   const d = parseDate(date)
+
+  // 查找该日的日记（diaryStore.diaries 是响应式，会跟随外部更新）
+  const diary = diaryStore.diaries.find(item => item.date === date)
+  const diaryContent = diary?.content?.trim() ?? ''
+  const hasDiary = diaryContent.length > 0
+  const diaryMood = diary?.mood ? (MOOD_EMOJI_MAP[diary.mood] ?? '') : ''
+
   return {
     date,
     monthDayLabel: `${d.getMonth() + 1}月${d.getDate()}日`,
@@ -77,6 +105,9 @@ function buildDayData(date: string) {
     doneCount,
     totalCount,
     progress,
+    hasDiary,
+    diaryContent,
+    diaryMood,
   }
 }
 
@@ -103,6 +134,9 @@ const sideData = computed<PageSideData | null>(() => {
       weekNumber: page.weekNumber,
       overviewProgress: 0,
       overviewDays: [],
+      hasDiary: false,
+      diaryContent: '',
+      diaryMood: '',
     }
   }
 
@@ -137,6 +171,9 @@ const sideData = computed<PageSideData | null>(() => {
         weekNumber: page.weekNumber,
         overviewProgress,
         overviewDays,
+        hasDiary: false,
+        diaryContent: '',
+        diaryMood: '',
       }
     } else {
       // 右页：周一详情
@@ -227,39 +264,79 @@ const sideData = computed<PageSideData | null>(() => {
 
     <!-- ========== 单日详情（工作日对 或 总览右页的周一） ========== -->
     <template v-else>
-      <div class="page-inner">
+      <div class="page-inner" :class="{ 'has-diary': sideData.hasDiary }">
+        <!-- 顶部头部：日期 + 进度（有日记时也保留，让用户一眼知道是哪天） -->
         <header class="day-header">
           <div class="day-title-line">
             <span class="day-date-label">{{ sideData.monthDayLabel }}</span>
             <span class="day-dot-sep">·</span>
             <span class="day-week-label">{{ sideData.weekdayLabel }}</span>
             <span class="today-tag" v-if="sideData.isToday">今天</span>
+            <!-- 有日记时显示心情表情 -->
+            <span v-if="sideData.hasDiary && sideData.diaryMood" class="diary-mood">{{ sideData.diaryMood }}</span>
           </div>
           <div class="day-progress-text">
             进度 {{ sideData.doneCount }}/{{ sideData.totalCount }}  {{ sideData.progress }}%
           </div>
         </header>
 
-        <div class="day-progress-bar">
-          <div class="progress-fill" :style="{ width: sideData.progress + '%' }"></div>
+        <!-- 有日记：左右分栏（左=日记，右=任务） -->
+        <div v-if="sideData.hasDiary" class="day-split">
+          <!-- 左半：今日记录 -->
+          <div class="diary-pane">
+            <div class="pane-title">📝 今日记录</div>
+            <div class="diary-content">{{ sideData.diaryContent }}</div>
+          </div>
+
+          <!-- 中间分隔线 -->
+          <div class="pane-divider"></div>
+
+          <!-- 右半：任务列表 -->
+          <div class="tasks-pane">
+            <div class="day-progress-bar">
+              <div class="progress-fill" :style="{ width: sideData.progress + '%' }"></div>
+            </div>
+            <ul class="day-tasks" v-if="sideData.todos.length > 0">
+              <li
+                v-for="todo in sideData.todos"
+                :key="todo.id"
+                class="task-item"
+                :class="{ done: todo.done }"
+              >
+                <span class="task-circle" :class="{ filled: todo.done }"></span>
+                <span class="task-text">{{ todo.text }}</span>
+              </li>
+            </ul>
+            <div v-else class="day-empty day-empty-small">
+              <div class="day-empty-icon">✨</div>
+              <div class="day-empty-text">这一天还没有待办</div>
+            </div>
+          </div>
         </div>
 
-        <ul class="day-tasks" v-if="sideData.todos.length > 0">
-          <li
-            v-for="todo in sideData.todos"
-            :key="todo.id"
-            class="task-item"
-            :class="{ done: todo.done }"
-          >
-            <span class="task-circle" :class="{ filled: todo.done }"></span>
-            <span class="task-text">{{ todo.text }}</span>
-          </li>
-        </ul>
-        <div v-else class="day-empty">
-          <div class="day-empty-icon">✨</div>
-          <div class="day-empty-text">这一天还没有待办</div>
-          <div class="day-empty-sub">写一件小目标吧~</div>
-        </div>
+        <!-- 无日记：原样显示进度条 + 任务列表 -->
+        <template v-else>
+          <div class="day-progress-bar">
+            <div class="progress-fill" :style="{ width: sideData.progress + '%' }"></div>
+          </div>
+
+          <ul class="day-tasks" v-if="sideData.todos.length > 0">
+            <li
+              v-for="todo in sideData.todos"
+              :key="todo.id"
+              class="task-item"
+              :class="{ done: todo.done }"
+            >
+              <span class="task-circle" :class="{ filled: todo.done }"></span>
+              <span class="task-text">{{ todo.text }}</span>
+            </li>
+          </ul>
+          <div v-else class="day-empty">
+            <div class="day-empty-icon">✨</div>
+            <div class="day-empty-text">这一天还没有待办</div>
+            <div class="day-empty-sub">写一件小目标吧~</div>
+          </div>
+        </template>
       </div>
     </template>
   </div>
@@ -459,6 +536,104 @@ const sideData = computed<PageSideData | null>(() => {
   text-align: center;
   gap: 6px;
   padding: 20px 10px;
+}
+
+/* 分栏状态下的紧凑空状态（任务区无任务时用） */
+.day-empty-small {
+  padding: 10px 4px;
+  gap: 4px;
+}
+
+.day-empty-small .day-empty-icon {
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+
+.day-empty-small .day-empty-text {
+  font-size: 12px;
+}
+
+/* ========== 有日记时的上下分栏布局 ========== */
+/* page-inner 在 has-diary 时仍然是 flex column，下方用 day-split 占满剩余空间 */
+.day-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;  /* 上下排列：上=日记，下=任务 */
+  align-items: stretch;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* 上半：今日记录 */
+.diary-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 10px 0;
+  overflow: hidden;
+}
+
+/* 下半：任务列表 */
+.tasks-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0 0 0;
+  overflow: hidden;
+}
+
+/* 中间分隔虚线（水平） */
+.pane-divider {
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
+  background: repeating-linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.15) 0 4px,
+    transparent 4px 8px
+  );
+  margin: 0;
+}
+
+/* 日记标题 */
+.pane-title {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+/* 日记正文：保留换行，可滚动 */
+.diary-content {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-right: 4px;
+}
+
+/* 心情表情 */
+.diary-mood {
+  font-size: 16px;
+  margin-left: 6px;
+  line-height: 1;
+}
+
+/* 任务区在分栏状态下的滚动列表 */
+.tasks-pane .day-tasks {
+  flex: 1;
+}
+
+.tasks-pane .day-progress-bar {
+  margin-bottom: 8px;
 }
 
 .day-empty-icon {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, inject, watch, nextTick } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
+import { useDiaryStore } from '@/store/modules/diaryStore'
 import { getTodayDate } from '@/utils/date'
 import type { BookPage } from '@/types/notebook'
 import NotebookBookPageSide from '@/components/NotebookBookPageSide.vue'
@@ -40,6 +41,7 @@ const switchTab = inject<(tab: string) => void>('switchTab', () => {
 })
 
 const todoStore = useTodoStore()
+const diaryStore = useDiaryStore()
 
 /**
  * 便捷函数：向父级 emit 当前聚焦日期（用于跨模式状态保持）
@@ -349,6 +351,10 @@ onMounted(() => {
   // 保证 todoStore 数据已载入
   if (todoStore.todos.length === 0) {
     todoStore.loadTodos()
+  }
+  // 保证 diaryStore 数据已载入（书本模式会展示每日日记内容）
+  if (diaryStore.diaries.length === 0) {
+    diaryStore.loadDiaries()
   }
 
   // 初始化页 index（按优先级）：
