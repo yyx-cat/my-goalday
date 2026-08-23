@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo } from '@/types/todo'
-import type { WeekViewData, DayItem } from '@/types/notebook'
+import type { WeekViewData, DayItem, BookPage } from '@/types/notebook'
 import { getTodos, saveTodos, addTodo as storageAddTodo } from '@/utils/storage'
 import {
   getTodayDate,
@@ -251,6 +251,144 @@ export const useTodoStore = defineStore('todo', () => {
     }
   }
 
+  /**
+   * 获取所有有任务的日期（去重、按时间正序排序：旧→新）
+   * 与 datesWithTodos（倒序、computed、便于列表展示）互补，
+   * 这里返回正序函数形式，便于书本模式按日期配对。
+   * @returns 日期字符串数组，升序排列，例如 ['2026-08-18','2026-08-19',...]
+   */
+  function getAllDatesWithTodos(): string[] {
+    const dateSet = new Set<string>()
+    todos.value.forEach(todo => {
+      dateSet.add(todo.date)
+    })
+    // 正序（YYYY-MM-DD 的字典序等于时间升序）
+    return Array.from(dateSet).sort((a, b) => a.localeCompare(b))
+  }
+
+  /**
+   * 将所有有任务的日期两两配对（0↔1 / 2↔3 / …），供书本模式左右页使用
+   * 配对规则：第 0 和第 1 一对，第 2 和第 3 一对……
+   * 若最后一对只剩一天，右页返回 null 占位。
+   * @returns 配对好的二维数组，每一项为 [左页日期, 右页日期 | null]
+   */
+  function getDatePairs(): [string, string | null][] {
+    const dates = getAllDatesWithTodos()
+    const pairs: [string, string | null][] = []
+    for (let i = 0; i < dates.length; i += 2) {
+      const left = dates[i]
+      const right: string | null = i + 1 < dates.length ? dates[i + 1] : null
+      pairs.push([left, right])
+    }
+    return pairs
+  }
+
+  /**
+   * 按周组织书本模式的所有"双页"：
+   *   - 整本书最开头：1 张封面页（cover）
+   *   - 之后每周 4 张内容页（按时间正序 旧→新 拼接）：
+   *       1) 本周总览页（week-overview）：左页=本周总计划（7 天概览），右页=周一详情
+   *       2) 工作日对页（weekday-pair）：左页=周二，右页=周三
+   *       3) 工作日对页（weekday-pair）：左页=周四，右页=周五
+   *       4) 工作日对页（weekday-pair）：左页=周六，右页=周日
+   * 封面只在整本书最开始出现一次，后续每一周直接从"总计划+周一"开始。
+   * 只生成"该周内至少有一天有任务"的周，避免完全空白的周堆积成无意义的页。
+   * @returns BookPage 数组（第 0 项为封面，之后为各周内容页，按时间正序）
+   */
+  function getBookPages(): BookPage[] {
+    const allDates = getAllDatesWithTodos()
+    if (allDates.length === 0) return []
+
+    // 1) 收集所有"有任务"的周（按周一去重，正序排列）
+    const weekStartSet = new Set<string>()
+    allDates.forEach(d => {
+      weekStartSet.add(getWeekStart(d))
+    })
+    const weekStarts = Array.from(weekStartSet).sort((a, b) => a.localeCompare(b))
+
+    // 2) 整本书最开头：1 张封面页（取第一周作为封面所标示的"开篇周"）
+    const firstWeekStart = weekStarts[0]
+    const firstWeekDates = getWeekDateRange(firstWeekStart)
+    const firstStartObj = parseDate(firstWeekStart)
+    const pages: BookPage[] = [
+      {
+        type: 'cover',
+        weekStart: firstWeekStart,
+        weekEnd: firstWeekDates[6],
+        weekNumber: getWeekNumber(firstWeekStart),
+        year: firstStartObj.getFullYear(),
+        month: firstStartObj.getMonth() + 1,
+        leftDate: null,
+        rightDate: null,
+        weekDates: firstWeekDates,
+      },
+    ]
+
+    // 3) 每周 4 张内容页
+    for (const weekStart of weekStarts) {
+      const weekDates = getWeekDateRange(weekStart) // 周一→周日 7 天
+      const weekEnd = weekDates[6]
+      const weekNumber = getWeekNumber(weekStart)
+      const startObj = parseDate(weekStart)
+      const year = startObj.getFullYear()
+      const month = startObj.getMonth() + 1
+
+      // (1) 本周总览页：左=总计划（占位，由组件渲染 7 天概览），右=周一
+      pages.push({
+        type: 'week-overview',
+        weekStart,
+        weekEnd,
+        weekNumber,
+        year,
+        month,
+        leftDate: null,         // 左页是"本周总计划"，由组件用 weekDates 渲染
+        rightDate: weekDates[0], // 周一
+        weekDates,
+      })
+
+      // (2) 工作日对：周二+周三
+      pages.push({
+        type: 'weekday-pair',
+        weekStart,
+        weekEnd,
+        weekNumber,
+        year,
+        month,
+        leftDate: weekDates[1],  // 周二
+        rightDate: weekDates[2], // 周三
+        weekDates,
+      })
+
+      // (3) 工作日对：周四+周五
+      pages.push({
+        type: 'weekday-pair',
+        weekStart,
+        weekEnd,
+        weekNumber,
+        year,
+        month,
+        leftDate: weekDates[3],  // 周四
+        rightDate: weekDates[4], // 周五
+        weekDates,
+      })
+
+      // (4) 工作日对：周六+周日
+      pages.push({
+        type: 'weekday-pair',
+        weekStart,
+        weekEnd,
+        weekNumber,
+        year,
+        month,
+        leftDate: weekDates[5],  // 周六
+        rightDate: weekDates[6], // 周日
+        weekDates,
+      })
+    }
+
+    return pages
+  }
+
   return {
     // 状态
     todos,
@@ -279,5 +417,10 @@ export const useTodoStore = defineStore('todo', () => {
     getWeekDatesFromDate,
     getTodosByDateRange,
     getWeekViewData,
+    // 方法（两种模式共用：日期列表与配对）
+    getAllDatesWithTodos,
+    getDatePairs,
+    // 方法（书本模式按周组织的双页）
+    getBookPages,
   }
 })

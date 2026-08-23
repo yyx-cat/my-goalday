@@ -239,3 +239,28 @@ export function getWeekDateRange(dateStr: string = getTodayDate()): string[] {
 export function isToday(dateStr: string): boolean {
   return dateStr === getTodayDate()
 }
+
+/**
+ * 判断日期是否在指定范围内（闭区间，含起止两端）
+ * @param date  - 待判断的日期字符串
+ * @param start - 起始日期字符串
+ * @param end   - 结束日期字符串
+ * @returns 若 date ∈ [min(start,end), max(start,end)] 返回 true；否则 false
+ */
+export function isDateInRange(date: string, start: string, end: string): boolean {
+  const from = start <= end ? start : end
+  const to = start <= end ? end : start
+  return date >= from && date <= to
+}
+
+/**
+ * 获取某天所在周的起止日期（周一 00:00 ~ 周日 23:59 对应的日期字符串）
+ * @param dateStr - 任意日期字符串
+ * @returns 该周的 { start: 周一日, end: 周日 } 结构
+ */
+export function getWeekOfDate(dateStr: string = getTodayDate()): { start: string; end: string } {
+  return {
+    start: getWeekStart(dateStr),
+    end: getWeekEnd(dateStr),
+  }
+}
