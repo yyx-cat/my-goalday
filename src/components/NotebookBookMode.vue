@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, inject, watch, nextTick } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
+import { getTodayDate } from '@/utils/date'
 import type { BookPage } from '@/types/notebook'
 import NotebookBookPageSide from '@/components/NotebookBookPageSide.vue'
 
@@ -291,6 +292,30 @@ function goScheduleTab(): void {
   }
 }
 
+/**
+ * 快速跳转到包含"今天"的页（用户翻远了能一键回到当前周）
+ */
+function jumpToToday(): void {
+  const today = getTodayDate()
+  const idx = findPageIndexByDate(today)
+  if (idx < 0 || idx === currentIndex.value) return
+  currentIndex.value = idx
+  visualIndex.value = idx
+  const focusD = getFocusDateOfPage(bookPages.value[idx])
+  if (focusD) emitFocusDate(focusD)
+}
+
+/**
+ * 快速跳转到整本书的封面页（第 0 页）
+ */
+function jumpToCover(): void {
+  if (currentIndex.value === 0) return
+  currentIndex.value = 0
+  visualIndex.value = 0
+  const focusD = getFocusDateOfPage(bookPages.value[0])
+  if (focusD) emitFocusDate(focusD)
+}
+
 // ========== 当前视觉页数据 ==========
 
 /**
@@ -326,13 +351,19 @@ onMounted(() => {
     todoStore.loadTodos()
   }
 
-  // 初始化页 index：默认从封面页（index=0）开始
-  // 如果有 focusDate/initialDate，则跳到包含该日期的页
+  // 初始化页 index（按优先级）：
+  //   1. 父组件传入的 focusDate / initialDate → 跳到包含该日期的页
+  //   2. 默认跳到包含"今天"的页（用户进入手账时立即看到当前周）
+  //   3. 找不到对应页 → 回落到封面页（index=0）
+  // 整本书按"年"生成所有周，从封面翻到今天要 200+ 页不现实，所以默认定位到今天
   const prefDate = props.focusDate || props.initialDate
   let initIndex: number
   if (prefDate && bookPages.value.length > 0) {
     const found = findPageIndexByDate(prefDate)
     initIndex = found >= 0 ? found : 0
+  } else if (bookPages.value.length > 0) {
+    const todayIdx = findPageIndexByDate(getTodayDate())
+    initIndex = todayIdx >= 0 ? todayIdx : 0
   } else {
     initIndex = 0
   }
@@ -417,8 +448,15 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 底部按钮：上一页 / 下一页（无页码） -->
+      <!-- 底部按钮：封面 / 上一页 / 周标识 / 今天 / 下一页 -->
       <nav class="book-bottom-bar">
+        <button
+          class="book-nav-btn cover-btn"
+          :disabled="currentIndex === 0 || isAnimating"
+          @click="jumpToCover"
+          title="跳到封面"
+        >📒 封面</button>
+
         <button
           class="book-nav-btn prev"
           :disabled="!hasPrev() || isAnimating"
@@ -428,6 +466,13 @@ onBeforeUnmount(() => {
         <div class="book-page-hint">
           {{ visualPage?.type === 'cover' ? '封面' : `第 ${visualPage?.weekNumber} 周` }}
         </div>
+
+        <button
+          class="book-nav-btn today-btn"
+          :disabled="isAnimating"
+          @click="jumpToToday"
+          title="跳到今天"
+        >📌 今天</button>
 
         <button
           class="book-nav-btn next"
@@ -689,7 +734,7 @@ onBeforeUnmount(() => {
   transform: rotateY(180deg);
 }
 
-/* ========== 底部栏：上一页 / 下一页（无页码） ========== */
+/* ========== 底部栏：封面 / 上一页 / 周标识 / 今天 / 下一页 ========== */
 .book-bottom-bar {
   position: fixed;
   left: 0;
@@ -698,11 +743,12 @@ onBeforeUnmount(() => {
   height: 60px;
   background: var(--color-bg-surface);
   border-top: 1px solid var(--color-border-divider);
-  padding: 0 12px;
+  padding: 0 10px;
   padding-bottom: env(safe-area-inset-bottom, 0);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   z-index: 20;
   font-family: var(--font-family-sans);
 }
@@ -712,14 +758,16 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   height: 36px;
-  padding: 0 14px;
+  padding: 0 10px;
   border-radius: 10px;
   border: 1px solid var(--color-border-divider);
   background: #fff;
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .book-nav-btn:hover:not(:disabled) {
@@ -731,10 +779,30 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+/* 封面按钮 / 今天按钮：暖色背景突出快捷跳转 */
+.book-nav-btn.cover-btn,
+.book-nav-btn.today-btn {
+  background: #F5EAE3;
+  border-color: #E5C8B6;
+  color: #6B4F3F;
+}
+
+.book-nav-btn.cover-btn:hover:not(:disabled),
+.book-nav-btn.today-btn:hover:not(:disabled) {
+  background: #EAD9CC;
+  border-color: #C9A58E;
+}
+
 .book-page-hint {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--color-text-secondary);
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  text-align: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ========== 移动端适配 ========== */
@@ -745,6 +813,16 @@ onBeforeUnmount(() => {
 
   .book-pages {
     max-height: calc(100vh - 180px);
+  }
+
+  /* 移动端按钮更紧凑 */
+  .book-nav-btn {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .book-page-hint {
+    font-size: 11px;
   }
 }
 </style>

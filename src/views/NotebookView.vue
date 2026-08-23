@@ -142,19 +142,31 @@ watch(hasAnyData, (nowHas, had) => {
 
 <template>
   <div class="notebook-container">
-    <!-- 顶部：模式切换按钮（📋 索引模式 / 📖 书本模式） -->
+    <!-- 顶部：返回按钮 + 模式切换按钮（📋 索引模式 / 📖 书本模式） -->
     <div class="mode-switcher">
-      <button
-        class="mode-btn"
-        :class="{ active: currentMode === 'index' }"
-        @click="switchMode('index')"
-      >📋 索引模式</button>
+      <!-- 左侧：返回日程 Tab（手账页隐藏了全局底部栏，所以需要独立返回入口） -->
+      <button class="back-btn" @click="goScheduleTab" aria-label="返回日程">
+        <span class="back-arrow">◀</span>
+        <span class="back-text">返回</span>
+      </button>
 
-      <button
-        class="mode-btn"
-        :class="{ active: currentMode === 'book' }"
-        @click="switchMode('book')"
-      >📖 书本模式</button>
+      <!-- 中间：模式切换 -->
+      <div class="mode-switcher-center">
+        <button
+          class="mode-btn"
+          :class="{ active: currentMode === 'index' }"
+          @click="switchMode('index')"
+        >📋 索引模式</button>
+
+        <button
+          class="mode-btn"
+          :class="{ active: currentMode === 'book' }"
+          @click="switchMode('book')"
+        >📖 书本模式</button>
+      </div>
+
+      <!-- 右侧：占位让中间居中（宽度与返回按钮对称） -->
+      <div class="mode-switcher-placeholder" aria-hidden="true"></div>
     </div>
 
     <!-- 统一空状态：无任何任务数据时不渲染子组件，直接引导去日程 -->
@@ -202,14 +214,60 @@ watch(hasAnyData, (nowHas, had) => {
   position: relative;
 }
 
-/* ========== 顶部：模式切换按钮 ========== */
+/* ========== 顶部：返回按钮 + 模式切换按钮 ========== */
 .mode-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 6px;
+  flex-shrink: 0;
+}
+
+/* 左侧返回按钮 */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid var(--color-border-divider);
+  background: #fff;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+  min-width: 76px;
+}
+
+.back-btn:hover {
+  border-color: var(--color-text-primary);
+}
+
+.back-arrow {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.back-text {
+  letter-spacing: 0.5px;
+}
+
+/* 右侧占位（与返回按钮同宽，让中间居中） */
+.mode-switcher-placeholder {
+  min-width: 76px;
+  flex-shrink: 0;
+}
+
+/* 中间模式切换按钮组 */
+.mode-switcher-center {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 10px 12px 6px;
-  flex-shrink: 0;
+  flex: 1;
 }
 
 .mode-btn {

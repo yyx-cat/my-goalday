@@ -12,6 +12,7 @@ import {
   getWeekStart,
   getWeekEnd,
   getWeekDateRange,
+  getWeekStartsInYear,
 } from '@/utils/date'
 
 /**
@@ -284,106 +285,130 @@ export const useTodoStore = defineStore('todo', () => {
   }
 
   /**
-   * 按周组织书本模式的所有"双页"：
-   *   - 整本书最开头：1 张封面页（cover）
-   *   - 之后每周 4 张内容页（按时间正序 旧→新 拼接）：
+   * 按年组织书本模式的所有"双页"：
+   *   - 默认范围：当前年（一年所有周，约 52-53 周）
+   *   - 如果有任务日期超出当前年，则扩展到 [最早任务年, 最晚任务年]
+   *   - 每年开头一张封面页（标示年份 + 第几周开始）
+   *   - 每年每周 4 张内容页（不管该周是否有任务，确保整年可翻看）：
    *       1) 本周总览页（week-overview）：左页=本周总计划（7 天概览），右页=周一详情
    *       2) 工作日对页（weekday-pair）：左页=周二，右页=周三
    *       3) 工作日对页（weekday-pair）：左页=周四，右页=周五
    *       4) 工作日对页（weekday-pair）：左页=周六，右页=周日
-   * 封面只在整本书最开始出现一次，后续每一周直接从"总计划+周一"开始。
-   * 只生成"该周内至少有一天有任务"的周，避免完全空白的周堆积成无意义的页。
-   * @returns BookPage 数组（第 0 项为封面，之后为各周内容页，按时间正序）
+   *   - 跨年的周（如1月1日所在周周一在去年12月底）用 Set 去重避免重复生成
+   * @returns BookPage 数组（按时间正序：旧→新）
    */
   function getBookPages(): BookPage[] {
     const allDates = getAllDatesWithTodos()
-    if (allDates.length === 0) return []
 
-    // 1) 收集所有"有任务"的周（按周一去重，正序排列）
-    const weekStartSet = new Set<string>()
-    allDates.forEach(d => {
-      weekStartSet.add(getWeekStart(d))
-    })
-    const weekStarts = Array.from(weekStartSet).sort((a, b) => a.localeCompare(b))
+    // 1) 确定年份范围：默认当前年，若有跨年任务则扩展
+    const today = new Date()
+    const currentYear = today.getFullYear()
+    let startYear = currentYear
+    let endYear = currentYear
+    if (allDates.length > 0) {
+      const earliestYear = parseDate(allDates[0]).getFullYear()
+      const latestYear = parseDate(allDates[allDates.length - 1]).getFullYear()
+      startYear = Math.min(startYear, earliestYear)
+      endYear = Math.max(endYear, latestYear)
+    }
 
-    // 2) 整本书最开头：1 张封面页（取第一周作为封面所标示的"开篇周"）
-    const firstWeekStart = weekStarts[0]
-    const firstWeekDates = getWeekDateRange(firstWeekStart)
-    const firstStartObj = parseDate(firstWeekStart)
-    const pages: BookPage[] = [
-      {
+    // 2) 跨年周去重集合：避免 2025-12-29 这种周既出现在 2025 又出现在 2026
+    const seenWeekStarts = new Set<string>()
+    const pages: BookPage[] = []
+
+    // 3) 遍历每一年，生成该年所有周的页面
+    for (let year = startYear; year <= endYear; year++) {
+      const allWeekStartsOfYear = getWeekStartsInYear(year)
+
+      // 该年未被生成过的周（去重）
+      const yearWeekStarts: string[] = []
+      for (const ws of allWeekStartsOfYear) {
+        if (!seenWeekStarts.has(ws)) {
+          seenWeekStarts.add(ws)
+          yearWeekStarts.push(ws)
+        }
+      }
+
+      // 该年没有任何新周（全部已在去年生成过），跳过
+      if (yearWeekStarts.length === 0) continue
+
+      // (1) 该年封面页：标示年份 + 该年第一周
+      const firstWeekStart = yearWeekStarts[0]
+      const firstWeekDates = getWeekDateRange(firstWeekStart)
+      const firstStartObj = parseDate(firstWeekStart)
+      pages.push({
         type: 'cover',
         weekStart: firstWeekStart,
         weekEnd: firstWeekDates[6],
         weekNumber: getWeekNumber(firstWeekStart),
-        year: firstStartObj.getFullYear(),
+        year,
         month: firstStartObj.getMonth() + 1,
         leftDate: null,
         rightDate: null,
         weekDates: firstWeekDates,
-      },
-    ]
-
-    // 3) 每周 4 张内容页
-    for (const weekStart of weekStarts) {
-      const weekDates = getWeekDateRange(weekStart) // 周一→周日 7 天
-      const weekEnd = weekDates[6]
-      const weekNumber = getWeekNumber(weekStart)
-      const startObj = parseDate(weekStart)
-      const year = startObj.getFullYear()
-      const month = startObj.getMonth() + 1
-
-      // (1) 本周总览页：左=总计划（占位，由组件渲染 7 天概览），右=周一
-      pages.push({
-        type: 'week-overview',
-        weekStart,
-        weekEnd,
-        weekNumber,
-        year,
-        month,
-        leftDate: null,         // 左页是"本周总计划"，由组件用 weekDates 渲染
-        rightDate: weekDates[0], // 周一
-        weekDates,
       })
 
-      // (2) 工作日对：周二+周三
-      pages.push({
-        type: 'weekday-pair',
-        weekStart,
-        weekEnd,
-        weekNumber,
-        year,
-        month,
-        leftDate: weekDates[1],  // 周二
-        rightDate: weekDates[2], // 周三
-        weekDates,
-      })
+      // (2) 该年每周 4 张内容页
+      for (const weekStart of yearWeekStarts) {
+        const weekDates = getWeekDateRange(weekStart) // 周一→周日 7 天
+        const weekEnd = weekDates[6]
+        const weekNumber = getWeekNumber(weekStart)
+        const startObj = parseDate(weekStart)
+        const wYear = startObj.getFullYear()
+        const wMonth = startObj.getMonth() + 1
 
-      // (3) 工作日对：周四+周五
-      pages.push({
-        type: 'weekday-pair',
-        weekStart,
-        weekEnd,
-        weekNumber,
-        year,
-        month,
-        leftDate: weekDates[3],  // 周四
-        rightDate: weekDates[4], // 周五
-        weekDates,
-      })
+        // (a) 本周总览页：左=总计划（占位，由组件用 weekDates 渲染），右=周一
+        pages.push({
+          type: 'week-overview',
+          weekStart,
+          weekEnd,
+          weekNumber,
+          year: wYear,
+          month: wMonth,
+          leftDate: null,
+          rightDate: weekDates[0], // 周一
+          weekDates,
+        })
 
-      // (4) 工作日对：周六+周日
-      pages.push({
-        type: 'weekday-pair',
-        weekStart,
-        weekEnd,
-        weekNumber,
-        year,
-        month,
-        leftDate: weekDates[5],  // 周六
-        rightDate: weekDates[6], // 周日
-        weekDates,
-      })
+        // (b) 工作日对：周二+周三
+        pages.push({
+          type: 'weekday-pair',
+          weekStart,
+          weekEnd,
+          weekNumber,
+          year: wYear,
+          month: wMonth,
+          leftDate: weekDates[1], // 周二
+          rightDate: weekDates[2], // 周三
+          weekDates,
+        })
+
+        // (c) 工作日对：周四+周五
+        pages.push({
+          type: 'weekday-pair',
+          weekStart,
+          weekEnd,
+          weekNumber,
+          year: wYear,
+          month: wMonth,
+          leftDate: weekDates[3], // 周四
+          rightDate: weekDates[4], // 周五
+          weekDates,
+        })
+
+        // (d) 工作日对：周六+周日
+        pages.push({
+          type: 'weekday-pair',
+          weekStart,
+          weekEnd,
+          weekNumber,
+          year: wYear,
+          month: wMonth,
+          leftDate: weekDates[5], // 周六
+          rightDate: weekDates[6], // 周日
+          weekDates,
+        })
+      }
     }
 
     return pages

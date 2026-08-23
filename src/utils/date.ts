@@ -264,3 +264,34 @@ export function getWeekOfDate(dateStr: string = getTodayDate()): { start: string
     end: getWeekEnd(dateStr),
   }
 }
+
+/**
+ * 获取某一年所有周的周一日期（按时间正序排列）
+ * 规则：
+ *   - 第一周 = 1月1日所在周的周一（可能是去年12月底）
+ *   - 最后一周 = 12月31日所在周的周一（可能是该年12月底）
+ *   - 跨年的周（如1月1日是周四，所在周周一在去年12月29日）会同时出现在两年里，
+ *     调用方应用 Set 去重避免重复
+ * @param year - 年份（如 2026）
+ * @returns 该年所有周一日期字符串数组 'YYYY-MM-DD'，正序排列
+ */
+export function getWeekStartsInYear(year: number): string[] {
+  const weekStarts: string[] = []
+
+  // 1月1日所在周的周一
+  const jan1Str = formatDate(new Date(year, 0, 1))
+  const firstWeekStart = getMondayOfWeek(jan1Str)
+
+  // 12月31日所在周的周一
+  const dec31Str = formatDate(new Date(year, 11, 31))
+  const lastWeekStart = getMondayOfWeek(dec31Str)
+
+  // 从 firstWeekStart 开始每周递增 7 天，直到超过 lastWeekStart（含）
+  let cursor = firstWeekStart
+  while (cursor <= lastWeekStart) {
+    weekStarts.push(cursor)
+    cursor = addDays(cursor, 7)
+  }
+
+  return weekStarts
+}
