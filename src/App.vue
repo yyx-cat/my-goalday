@@ -3,6 +3,7 @@ import { ref, provide } from 'vue'
 import ScheduleView from '@/views/ScheduleView.vue'
 import NotebookView from '@/views/NotebookView.vue'
 import ProfileView from '@/views/ProfileView.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 /**
  * Tab 项类型
@@ -121,6 +122,9 @@ provide<() => TabItem['key']>('getActiveTab', () => activeTab.value)
         <span class="tab-label">{{ tab.label }}</span>
       </button>
     </nav>
+
+    <!-- 全局确认弹窗（删除等危险动作二次确认） -->
+    <ConfirmDialog />
   </div>
 </template>
 

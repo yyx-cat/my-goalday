@@ -4,6 +4,11 @@ import { useTodoStore } from '@/store/modules/todoStore'
 import { useHabitStore } from '@/store/modules/habitStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
 import { useMonthlyTaskStore } from '@/store/modules/monthlyTaskStore'
+import { useWeightStore } from '@/store/modules/weightStore'
+import { useConfirmStore } from '@/store/modules/confirmStore'
+import HabitCheckInView from '@/components/habit/HabitCheckInView.vue'
+import HabitFinanceView from '@/components/habit/HabitFinanceView.vue'
+import HabitWeightView from '@/components/habit/HabitWeightView.vue'
 import {
   getTodayDate,
   addDays,
@@ -21,11 +26,18 @@ const todoStore = useTodoStore()
 const habitStore = useHabitStore()
 const diaryStore = useDiaryStore()
 const monthlyTaskStore = useMonthlyTaskStore()
+const weightStore = useWeightStore()
+const confirmStore = useConfirmStore()
 
 /**
  * 子标签类型
  */
 type SubTab = 'week' | 'record' | 'list' | 'habit'
+
+/**
+ * 习惯子标签类型（打卡/理财/减重）
+ */
+type HabitSubTab = 'checkin' | 'finance' | 'weight'
 
 /**
  * 单个日期行的数据结构（周视图用）
@@ -57,6 +69,9 @@ interface EditingTask {
 
 /** 当前激活的子标签（周/记录/清单/习惯） */
 const activeSubTab = ref<SubTab>('week')
+
+/** 当前激活的习惯子标签（打卡/理财/减重），默认打卡 */
+const activeHabitSubTab = ref<HabitSubTab>('checkin')
 
 /** 当前所在周的锚定日期（默认今天） */
 const currentAnchor = ref<string>(getTodayDate())
@@ -275,8 +290,16 @@ function handleToggleTodo(id: string): void {
   todoStore.toggleTodo(id)
 }
 
-/** 删除待办 */
-function handleDeleteTodo(id: string): void {
+/**
+ * 删除待办（二次确认）
+ * @param id - 待办 id
+ */
+async function handleDeleteTodo(id: string): Promise<void> {
+  const ok = await confirmStore.confirm({
+    title: '删除待办',
+    message: '确认删除这条待办任务吗？删除后无法恢复。',
+  })
+  if (!ok) return
   todoStore.deleteTodo(id)
 }
 
@@ -285,8 +308,16 @@ function handleToggleMonthTask(id: string): void {
   monthlyTaskStore.toggleTask(id)
 }
 
-/** 删除月度任务 */
-function handleDeleteMonthTask(id: string): void {
+/**
+ * 删除月度任务（二次确认）
+ * @param id - 月度任务 id
+ */
+async function handleDeleteMonthTask(id: string): Promise<void> {
+  const ok = await confirmStore.confirm({
+    title: '删除月度任务',
+    message: '确认删除这条月度任务吗？删除后无法恢复。',
+  })
+  if (!ok) return
   monthlyTaskStore.deleteTask(id)
 }
 
@@ -305,8 +336,15 @@ function handleSaveDiary(): void {
   diaryModified.value = false
 }
 
-/** 删除当前日记 */
-function handleDeleteDiary(): void {
+/**
+ * 删除当前日记（二次确认）
+ */
+async function handleDeleteDiary(): Promise<void> {
+  const ok = await confirmStore.confirm({
+    title: '删除日记',
+    message: `确认删除 ${diaryStore.currentDate} 的日记吗？删除后无法恢复。`,
+  })
+  if (!ok) return
   diaryStore.deleteCurrentDiary()
   diaryModified.value = false
 }
@@ -325,6 +363,7 @@ onMounted(() => {
   habitStore.loadHabits()
   diaryStore.loadDiaries()
   monthlyTaskStore.loadTasks()
+  weightStore.loadWeight()
 })
 </script>
 
@@ -508,12 +547,38 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- ========== 习惯视图：空开占位 ========== -->
+      <!-- ========== 习惯视图：打卡/理财/减重 三子界面 ========== -->
       <div v-show="activeSubTab === 'habit'" class="view-habit">
-        <div class="habit-placeholder">
-          <span class="habit-icon">🎯</span>
-          <p class="habit-title">习惯功能即将上线</p>
-          <p class="habit-desc">这里将用于习惯打卡与统计</p>
+        <!-- 习惯二级子标签：打卡/理财/减重 -->
+        <nav class="habit-sub-tabs">
+          <button
+            class="habit-sub-tab"
+            :class="{ active: activeHabitSubTab === 'checkin' }"
+            @click="activeHabitSubTab = 'checkin'"
+          >打卡</button>
+          <span class="tab-divider">|</span>
+          <button
+            class="habit-sub-tab"
+            :class="{ active: activeHabitSubTab === 'finance' }"
+            @click="activeHabitSubTab = 'finance'"
+          >理财</button>
+          <span class="tab-divider">|</span>
+          <button
+            class="habit-sub-tab"
+            :class="{ active: activeHabitSubTab === 'weight' }"
+            @click="activeHabitSubTab = 'weight'"
+          >减重</button>
+        </nav>
+
+        <!-- 三子界面切换（v-show 保留各子界面状态） -->
+        <div v-show="activeHabitSubTab === 'checkin'" class="habit-sub-panel">
+          <HabitCheckInView />
+        </div>
+        <div v-show="activeHabitSubTab === 'finance'" class="habit-sub-panel">
+          <HabitFinanceView />
+        </div>
+        <div v-show="activeHabitSubTab === 'weight'" class="habit-sub-panel">
+          <HabitWeightView />
         </div>
       </div>
     </div>
@@ -1093,39 +1158,51 @@ onMounted(() => {
   cursor: text;
 }
 
-/* ========== 习惯视图：占位 ========== */
+/* ========== 习惯视图：打卡/理财/减重 ========== */
 .view-habit {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 习惯二级子标签栏 */
+.habit-sub-tabs {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  min-height: 300px;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border-divider);
+  background: var(--color-bg-surface);
+  flex-shrink: 0;
 }
 
-.habit-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  text-align: center;
+.habit-sub-tab {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-tertiary);
+  padding: 0;
+  transition: color 0.2s;
 }
 
-.habit-icon {
-  font-size: 48px;
-  opacity: 0.5;
-}
-
-.habit-title {
-  margin: 8px 0 0;
-  font-size: 15px;
-  color: var(--color-text-secondary);
+.habit-sub-tab.active {
+  color: var(--color-text-primary);
   font-weight: var(--font-weight-medium);
 }
 
-.habit-desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-text-tertiary);
+/* 习惯子面板容器 */
+.habit-sub-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ========== 右下角抽屉切换按钮 ========== */
