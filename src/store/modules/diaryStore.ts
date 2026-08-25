@@ -28,6 +28,10 @@ export const useDiaryStore = defineStore('diary', () => {
   // 保存状态提示
   const savedHint = ref<string>('')
 
+  // 待跳转的记录日期（手账双击日期后，切到日程→记录视图并定位到该日期）
+  // 由手账组件写入，ScheduleView watch 消费后清空
+  const pendingOpenRecordDate = ref<string | null>(null)
+
   /**
    * 从 localStorage 加载所有日记
    */
@@ -71,6 +75,17 @@ export const useDiaryStore = defineStore('diary', () => {
     if (!date) return
     currentDate.value = date
     loadDraft()
+  }
+
+  /**
+   * 请求跳转到日程模块的记录视图并定位到指定日期
+   * 由手账组件双击日期页面时调用：先写入 pending 状态，
+   * 再由 ScheduleView watch 消费（切到 record 子标签 + goToDate + 清 pending）
+   * @param date - 目标日期字符串 'YYYY-MM-DD'
+   */
+  function requestOpenRecordAtDate(date: string): void {
+    if (!date) return
+    pendingOpenRecordDate.value = date
   }
 
   /**
@@ -138,6 +153,7 @@ export const useDiaryStore = defineStore('diary', () => {
     draftContent,
     draftMood,
     savedHint,
+    pendingOpenRecordDate,
     // 计算属性
     hasCurrentDiary,
     currentWordCount,
@@ -147,6 +163,7 @@ export const useDiaryStore = defineStore('diary', () => {
     navigateDate,
     goToToday,
     goToDate,
+    requestOpenRecordAtDate,
     saveCurrentDiary,
     deleteCurrentDiary,
     hasDiary,

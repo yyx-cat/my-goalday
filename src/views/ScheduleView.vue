@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useHabitStore } from '@/store/modules/habitStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
@@ -381,6 +381,25 @@ onMounted(() => {
   monthlyTaskStore.loadTasks()
   weightStore.loadWeight()
 })
+
+/**
+ * 监听来自手账双击日期的跳转请求
+ * 手账组件写入 diaryStore.pendingOpenRecordDate 后，
+ * 这里响应：切到记录子标签 + 跳到目标日期 + 清 pending
+ */
+watch(
+  () => diaryStore.pendingOpenRecordDate,
+  (targetDate) => {
+    if (!targetDate) return
+    // 直接设置子标签为 record，不走 switchSubTab（避免它 goToToday 覆盖目标日期）
+    commitEditingTask()
+    activeSubTab.value = 'record'
+    diaryStore.goToDate(targetDate)
+    diaryModified.value = false
+    // 消费完毕，清空 pending，避免重复触发
+    diaryStore.pendingOpenRecordDate = null
+  },
+)
 </script>
 
 <template>

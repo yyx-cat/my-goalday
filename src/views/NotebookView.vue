@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, inject } from 'vue'
+import { ref, computed, onMounted, watch, inject, provide } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
+import { useDiaryStore } from '@/store/modules/diaryStore'
 import { getTodayDate } from '@/utils/date'
 import NotebookIndexMode from '@/components/NotebookIndexMode.vue'
 import NotebookBookMode from '@/components/NotebookBookMode.vue'
 import type { NotebookMode } from '@/types/notebook'
 
 const todoStore = useTodoStore()
+const diaryStore = useDiaryStore()
 
 // 从 App.vue 根层级注入的全局方法
 /**
@@ -110,6 +112,24 @@ function handleFocusDateUpdate(date: string): void {
 function goScheduleTab(): void {
   switchTab('schedule')
 }
+
+/**
+ * 跳转到日程模块的记录视图并定位到指定日期（手账双击日期页面时触发）
+ * 先通过 diaryStore 写入待跳转日期，再切到日程 Tab，
+ * ScheduleView 会 watch pendingOpenRecordDate 并切到记录子标签 + 定位日期
+ * 同时恢复全局底部栏（手账页隐藏了它）
+ * @param date - 目标日期字符串 'YYYY-MM-DD'
+ */
+function jumpToScheduleRecord(date: string): void {
+  if (!date) return
+  diaryStore.requestOpenRecordAtDate(date)
+  // 离开手账恢复全局底部栏
+  setTabBarHidden(false)
+  switchTab('schedule')
+}
+
+// 将跳转方法下发给手账子模式组件（索引模式 / 书本模式）
+provide<(date: string) => void>('jumpToScheduleRecord', jumpToScheduleRecord)
 
 // ========== 生命周期 ==========
 

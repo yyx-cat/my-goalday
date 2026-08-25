@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, inject } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
 import {
@@ -54,6 +54,11 @@ const emit = defineEmits<Emits>()
 
 const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
+
+// 从父级 NotebookView 注入：双击日期跳转到日程记录视图并定位到该日期
+const jumpToScheduleRecord = inject<(date: string) => void>('jumpToScheduleRecord', () => {
+  // 默认空函数：外层未 provide 时不报错
+})
 
 /**
  * 便捷函数：向父级 emit 当前聚焦日期（用于跨模式状态保持）
@@ -281,6 +286,8 @@ onMounted(() => {
                 selected: date === selectedDate,
               }"
               @click="selectDay(date)"
+              @dblclick.stop="jumpToScheduleRecord(date)"
+              title="双击跳转到该日记录"
             >
               <span class="day-week">{{ getWeekDay(parseDate(date)) }}</span>
               <span class="day-num">{{ parseDate(date).getDate() }}</span>
@@ -296,7 +303,11 @@ onMounted(() => {
         <div class="book-spine"></div>
 
         <!-- 右页：选中日详情 -->
-        <section class="paper right-page">
+        <section
+          class="paper right-page"
+          @dblclick="jumpToScheduleRecord(selectedDate)"
+          title="双击跳转到该日记录"
+        >
           <header class="page-header right-header">
             <span class="right-day-num">{{ selectedMeta.dayNumber }}</span>
             <span class="right-day-split">|</span>

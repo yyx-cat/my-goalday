@@ -40,6 +40,14 @@ const switchTab = inject<(tab: string) => void>('switchTab', () => {
   // 默认空函数：避免 TS 类型推断为 undefined，同时保持无副作用
 })
 
+/**
+ * 从父级 NotebookView 注入：双击日期页面跳转到日程记录视图并定位到该日期
+ * 若外层未 provide，则降级为空函数
+ */
+const jumpToScheduleRecord = inject<(date: string) => void>('jumpToScheduleRecord', () => {
+  // 默认空函数：外层未 provide 时不报错
+})
+
 const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
 
@@ -236,34 +244,69 @@ function goPrevPair(): void {
 
 // ========== 交互 ==========
 
+// ========== 自定义双击检测：双击页面跳转到该日记录 ==========
+// 不能用原生 @dblclick，因为它会先触发两次 @click 翻页，导致 visualPage 已变、取到错误日期
+// 改为：第一次 click 延迟执行翻页，若 250ms 内来了第二次 click 则判定为双击 → 跳转（不翻页）
+// 注意：event.currentTarget 在事件结束后会被 DOM 置空，必须在事件同步阶段立即取 rect
+let pendingClickTimer: ReturnType<typeof setTimeout> | null = null
+const DBL_CLICK_DELAY = 250
+
 /**
- * 点击左页左半侧 → 翻上一页
+ * 左页点击（带双击感知）：单击延迟翻页，双击则跳转到左页日期记录
+ * 左页左半侧单击 → 翻上一页
  * @param event - 原生点击事件
  */
-function onLeftPageClick(event: MouseEvent): void {
+function onLeftPageClickDblAware(event: MouseEvent): void {
   if (isAnimating.value) return
+  // 同步阶段立即记录点击位置（setTimeout 回调里 currentTarget 已是 null）
   const el = event.currentTarget as HTMLElement | null
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  const x = event.clientX - rect.left
-  if (x < rect.width / 2) {
-    goPrevPair()
+  const rect = el?.getBoundingClientRect() ?? null
+  const clickX = rect ? event.clientX - rect.left : 0
+  if (pendingClickTimer) {
+    // 第二次点击 → 双击命中
+    clearTimeout(pendingClickTimer)
+    pendingClickTimer = null
+    const date = visualPage.value?.leftDate ?? null
+    if (date) jumpToScheduleRecord(date)
+    return
   }
+  // 第一次点击 → 延迟执行翻页，给双击留窗口
+  pendingClickTimer = setTimeout(() => {
+    pendingClickTimer = null
+    // 用闭包里保存的 rect 判断点击位置，不依赖 event.currentTarget
+    if (rect && clickX < rect.width / 2) {
+      goPrevPair()
+    }
+  }, DBL_CLICK_DELAY)
 }
 
 /**
- * 点击右页右半侧 → 翻下一页
+ * 右页点击（带双击感知）：单击延迟翻页，双击则跳转到右页日期记录
+ * 右页右半侧单击 → 翻下一页
  * @param event - 原生点击事件
  */
-function onRightPageClick(event: MouseEvent): void {
+function onRightPageClickDblAware(event: MouseEvent): void {
   if (isAnimating.value) return
+  // 同步阶段立即记录点击位置（setTimeout 回调里 currentTarget 已是 null）
   const el = event.currentTarget as HTMLElement | null
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  const x = event.clientX - rect.left
-  if (x >= rect.width / 2) {
-    goNextPair()
+  const rect = el?.getBoundingClientRect() ?? null
+  const clickX = rect ? event.clientX - rect.left : 0
+  if (pendingClickTimer) {
+    // 第二次点击 → 双击命中
+    clearTimeout(pendingClickTimer)
+    pendingClickTimer = null
+    const date = visualPage.value?.rightDate ?? null
+    if (date) jumpToScheduleRecord(date)
+    return
   }
+  // 第一次点击 → 延迟执行翻页，给双击留窗口
+  pendingClickTimer = setTimeout(() => {
+    pendingClickTimer = null
+    // 用闭包里保存的 rect 判断点击位置，不依赖 event.currentTarget
+    if (rect && clickX >= rect.width / 2) {
+      goNextPair()
+    }
+  }, DBL_CLICK_DELAY)
 }
 
 /**
@@ -388,6 +431,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
+  // 清理双击检测的待执行计时器，避免组件卸载后仍触发翻页
+  if (pendingClickTimer) {
+    clearTimeout(pendingClickTimer)
+    pendingClickTimer = null
+  }
 })
 </script>
 
@@ -416,7 +464,8 @@ onBeforeUnmount(() => {
           <section
             class="paper left-page"
             :class="{ 'left-clickable': hasPrev() }"
-            @click="onLeftPageClick"
+            @click="onLeftPageClickDblAware"
+            title="双击跳转到该日记录"
           >
             <NotebookBookPageSide :page="visualPage" side="left" />
           </section>
@@ -430,7 +479,8 @@ onBeforeUnmount(() => {
             <section
               class="paper right-page-static"
               :class="{ 'right-clickable': hasNext() }"
-              @click="onRightPageClick"
+              @click="onRightPageClickDblAware"
+              title="双击跳转到该日记录"
             >
               <NotebookBookPageSide :page="visualPage" side="right" />
             </section>
