@@ -91,6 +91,9 @@ const diaryModified = ref<boolean>(false)
 /** 右下角清单抽屉是否展开 */
 const drawerOpen = ref<boolean>(false)
 
+/** 记录视图：日期选择器是否展开 */
+const diaryDatePickerShow = ref<boolean>(false)
+
 // ========== 计算属性 ==========
 
 /** 当前周的 7 天日期数组（周一到周日正序） */
@@ -330,8 +333,21 @@ function onDiaryInput(): void {
   diaryModified.value = true
 }
 
-/** 保存当前日记 */
-function handleSaveDiary(): void {
+/**
+ * 保存当前日记（二次确认：编辑的不是今天的日记时提醒用户）
+ */
+async function handleSaveDiary(): Promise<void> {
+  const isEditingToday = diaryStore.currentDate === getTodayDate()
+  // 编辑非今天的日记时，先弹二次确认提醒用户
+  if (!isEditingToday) {
+    const ok = await confirmStore.confirm({
+      title: '保存非今日日记',
+      message: `你正在保存 ${diaryStore.currentDate} 的日记，而不是今天（${getTodayDate()}）。\n确认仍保存到 ${diaryStore.currentDate} 吗？`,
+      confirmText: '确认保存',
+      cancelText: '再想想',
+    })
+    if (!ok) return
+  }
   diaryStore.saveCurrentDiary()
   diaryModified.value = false
 }
@@ -469,19 +485,54 @@ onMounted(() => {
 
       <!-- ========== 记录视图：纯日记 ========== -->
       <div v-show="activeSubTab === 'record'" class="view-record">
-        <!-- 日期导航 -->
+        <!-- 日期导航：快捷按钮 + 日期显示 + 日期选择器 -->
         <div class="diary-nav">
-          <button class="diary-nav-btn" @click="diaryStore.navigateDate('prev')">‹</button>
-          <span class="diary-date">{{ diaryStore.currentDate }}</span>
-          <button class="diary-nav-btn" @click="diaryStore.navigateDate('next')">›</button>
-          <button v-if="diaryStore.currentDate !== getTodayDate()" class="diary-today-btn" @click="diaryStore.goToToday()">今天</button>
+          <div class="diary-nav-left">
+            <button class="diary-quick-btn" @click="diaryStore.navigateDate('prev')">昨天</button>
+            <button
+              class="diary-quick-btn today"
+              :disabled="diaryStore.currentDate === getTodayDate()"
+              @click="diaryStore.goToToday()"
+            >今天</button>
+            <button class="diary-quick-btn" @click="diaryStore.navigateDate('next')">明天</button>
+          </div>
+          <div class="diary-nav-center">
+            <button class="diary-date-btn" @click="diaryDatePickerShow = !diaryDatePickerShow">
+              <span class="diary-date">{{ diaryStore.currentDate }}</span>
+              <svg class="diary-date-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            <!-- 日期选择器下拉 -->
+            <div v-if="diaryDatePickerShow" class="diary-date-picker" @click.stop>
+              <input
+                type="date"
+                :value="diaryStore.currentDate"
+                @change="(e: Event) => {
+                  const el = e.target as HTMLInputElement;
+                  if (el.value) diaryStore.goToDate(el.value);
+                  diaryDatePickerShow = false;
+                }"
+                class="diary-native-date"
+              />
+              <button class="diary-picker-close" @click="diaryDatePickerShow = false">关闭</button>
+            </div>
+          </div>
+          <div class="diary-nav-right">
+            <!-- 非今天时显示醒目提示 + 一键回到今天 -->
+            <span
+              v-if="diaryStore.currentDate !== getTodayDate()"
+              class="diary-not-today-tag"
+              title="当前查看的不是今天的日记"
+            >📌 非今日</span>
+          </div>
         </div>
 
         <!-- 日记编辑区 -->
         <textarea
           v-model="diaryStore.draftContent"
           @input="onDiaryInput"
-          placeholder="✍️ 写下今日想法..."
+          :placeholder="diaryStore.currentDate === getTodayDate() ? '✍️ 写下今日想法...' : `✍️ 写下 ${diaryStore.currentDate} 的想法...`"
           class="diary-textarea"
         ></textarea>
 
@@ -490,7 +541,16 @@ onMounted(() => {
           <span class="word-count">{{ diaryWordCount }} 字</span>
           <div class="diary-actions">
             <button v-if="diaryStore.hasCurrentDiary" class="diary-action-btn danger" @click="handleDeleteDiary">删除</button>
-            <button class="diary-action-btn" :class="{ modified: diaryModified }" @click="handleSaveDiary">保存</button>
+            <button
+              class="diary-action-btn"
+              :class="{
+                modified: diaryModified,
+                'non-today': diaryStore.currentDate !== getTodayDate()
+              }"
+              @click="handleSaveDiary"
+            >
+              {{ diaryStore.currentDate === getTodayDate() ? '保存' : `保存到 ${diaryStore.currentDate}` }}
+            </button>
           </div>
         </div>
         <!-- 保存提示 -->
@@ -975,39 +1035,130 @@ onMounted(() => {
 .diary-nav {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 12px 0;
+  position: relative;
+  flex-wrap: wrap;
 }
 
-.diary-nav-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-border-divider);
-  border-radius: var(--radius-full);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0;
+.diary-nav-left,
+.diary-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.diary-date {
+.diary-nav-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   flex: 1;
-  text-align: center;
-  font-size: 15px;
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
 }
 
-.diary-today-btn {
-  padding: 4px 14px;
-  border: 1px solid var(--color-text-primary);
-  border-radius: 12px;
-  background: transparent;
+/* 昨天 / 今天 / 明天 快捷按钮 */
+.diary-quick-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 14px;
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 12px;
   cursor: pointer;
   font-family: var(--font-family-sans);
+  transition: all 0.15s;
+}
+
+.diary-quick-btn:hover {
+  border-color: var(--color-text-primary);
+}
+
+.diary-quick-btn.today {
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+  color: var(--color-bg-main);
+}
+
+.diary-quick-btn.today:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* 日期展示按钮（点击展开日期选择器） */
+.diary-date-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+}
+
+.diary-date {
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.diary-date-arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-secondary);
+}
+
+/* 日期选择器下拉 */
+.diary-date-picker {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  background: #fff;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 20;
+}
+
+.diary-native-date {
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-main);
+  outline: none;
+}
+
+.diary-picker-close {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+}
+
+/* 非今日的醒目标记 */
+.diary-not-today-tag {
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: #F5E0B8;
+  color: #7C5C21;
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
 }
 
 .diary-textarea {
@@ -1062,6 +1213,14 @@ onMounted(() => {
 }
 
 .diary-action-btn.modified {
+  opacity: 1;
+}
+
+/* 非今日保存按钮：黄橙醒目色，二次提醒这是历史/未来日期保存 */
+.diary-action-btn.non-today {
+  background: #E09553;
+  border-color: #E09553;
+  color: #fff;
   opacity: 1;
 }
 

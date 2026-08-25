@@ -595,9 +595,10 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  padding: 6px 10px 80px;
+  /* 顶部留白 + 为底部导航栏留空间，整体更像一本书（不会占满屏幕） */
+  padding: 16px 12px 80px;
   box-sizing: border-box;
   overflow: visible;
   /* 整个书本区域启用 3D 透视 */
@@ -605,13 +606,19 @@ onBeforeUnmount(() => {
 }
 
 .book-pages {
-  width: min(96%, 780px);
-  height: 100%;
-  max-height: calc(100vh - 190px);
+  /*
+   * 书本比例设计（接近一本翻开的 32 开笔记本，宽:高 ≈ 1:0.85）
+   * - 宽度：最多 780px（大桌面），或 88% 视口宽度
+   * - 高度：按宽度的 0.78 比例（保证书本看起来像书，而非拉满的长条形）
+   * - 再夹一个上限：剩余可用高度的 100%，避免溢出
+   */
+  width: min(88vw, 780px);
+  aspect-ratio: 1 / 0.78;
+  max-height: calc(100vh - 200px);
+  max-width: 100%;
   display: flex;
   align-items: stretch;
   position: relative;
-  /* 不需要 preserve-3d：3D 透视由 .right-page-area 单独管理，避免影响左右页静态布局 */
 }
 
 /* 纸张通用样式 */
@@ -813,22 +820,41 @@ onBeforeUnmount(() => {
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 640px) {
+  .mode-header {
+    padding: 8px 12px 4px;
+  }
+
   .book-wrapper {
-    padding: 6px 6px 80px;
+    padding: 10px 6px 80px;
   }
 
   .book-pages {
-    max-height: calc(100vh - 180px);
+    /* 手机端：宽占比再小一点，呈现"一本书"的感觉（周围留白明显） */
+    width: min(92vw, 780px);
+    /* 书本宽高比 1:0.9 — 手机屏幕较长，略微拉高避免太扁 */
+    aspect-ratio: 1 / 0.9;
+    max-height: calc(100vh - 210px);
+    /* 让书本与顶栏、底栏保持距离，看起来是独立的"书" */
+    margin: 0 auto;
+    box-shadow: 0 12px 28px rgba(78, 63, 55, 0.18);
+    border-radius: 4px;
+    overflow: hidden;
   }
 
   /* 移动端按钮更紧凑 */
   .book-nav-btn {
-    padding: 0 8px;
+    padding: 0 6px;
     font-size: 11px;
+    height: 34px;
   }
 
   .book-page-hint {
     font-size: 11px;
+  }
+
+  /* 手机端：空状态减少底部 padding */
+  .empty-state {
+    padding: 0 16px 80px;
   }
 }
 </style>

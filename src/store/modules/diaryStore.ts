@@ -64,6 +64,16 @@ export const useDiaryStore = defineStore('diary', () => {
   }
 
   /**
+   * 跳转到指定日期（供日期选择器直接选择任意日期）
+   * @param date - 目标日期字符串 'YYYY-MM-DD'
+   */
+  function goToDate(date: string): void {
+    if (!date) return
+    currentDate.value = date
+    loadDraft()
+  }
+
+  /**
    * 保存当前草稿为日记
    */
   function saveCurrentDiary(): void {
@@ -136,6 +146,7 @@ export const useDiaryStore = defineStore('diary', () => {
     loadDraft,
     navigateDate,
     goToToday,
+    goToDate,
     saveCurrentDiary,
     deleteCurrentDiary,
     hasDiary,

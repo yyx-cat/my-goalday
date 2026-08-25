@@ -444,16 +444,24 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
-  padding: 6px 10px 80px;
+  /* 顶部留白 + 为底部导航栏留空间，整体更像一本书（不会占满屏幕） */
+  padding: 16px 12px 80px;
   box-sizing: border-box;
 }
 
 .book-pages {
-  width: min(96%, 780px);
-  height: 100%;
-  max-height: calc(100vh - 190px);
+  /*
+   * 书本比例与 BookMode 一致：宽高比 1:0.78（桌面）
+   * - 宽度：最多 780px（大桌面），或 88% 视口宽度
+   * - 高度：按宽度比例
+   * - 再夹一个上限：剩余可用高度的 100%，避免溢出
+   */
+  width: min(88vw, 780px);
+  aspect-ratio: 1 / 0.78;
+  max-height: calc(100vh - 200px);
+  max-width: 100%;
   display: flex;
   align-items: stretch;
 }
@@ -876,16 +884,27 @@ onMounted(() => {
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 640px) {
+  .mode-header {
+    padding: 8px 12px 4px;
+  }
+
   .book-wrapper {
-    padding: 6px 6px 80px;
+    padding: 10px 6px 80px;
   }
 
   .book-pages {
-    max-height: calc(100vh - 180px);
+    /* 手机端：更紧凑的书本比例，留白明显，像一本书 */
+    width: min(92vw, 780px);
+    aspect-ratio: 1 / 0.9;
+    max-height: calc(100vh - 210px);
+    margin: 0 auto;
+    box-shadow: 0 12px 28px rgba(78, 63, 55, 0.18);
+    border-radius: 4px;
+    overflow: hidden;
   }
 
   .paper {
-    padding: 14px 12px 12px;
+    padding: 12px 10px 10px;
   }
 
   .left-page,
