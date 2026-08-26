@@ -1,4 +1,4 @@
-import type { WeightData, WeightRecord } from '@/types/weight'
+import type { WeightData, WeightMode, WeightRecord } from '@/types/weight'
 
 /** localStorage 存储键（与项目硬约束命名风格一致） */
 const STORAGE_KEY = 'my-goalday-weight'
@@ -8,6 +8,7 @@ const EMPTY_DATA: WeightData = {
   initialWeight: 0,
   initialDate: '',
   records: [],
+  mode: 'daily',
 }
 
 /**
@@ -18,11 +19,12 @@ export function getWeightData(): WeightData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...EMPTY_DATA }
-    const parsed = JSON.parse(raw) as WeightData
+    const parsed = JSON.parse(raw) as Partial<WeightData>
     return {
       initialWeight: parsed.initialWeight ?? 0,
       initialDate: parsed.initialDate ?? '',
       records: Array.isArray(parsed.records) ? parsed.records : [],
+      mode: parsed.mode ?? 'daily',
     }
   } catch (e) {
     console.error('读取体重数据失败:', e)
@@ -55,17 +57,31 @@ export function setInitialWeight(initialWeight: number, initialDate: string): vo
 }
 
 /**
- * 新增或更新某日体重记录
- * 若同一天已有记录则覆盖
- * @param date - 日期字符串 'YYYY-MM-DD'
- * @param weight - 当日体重（kg）
+ * 设置记录模式
+ * @param mode - 记录模式（daily/早晚/三餐）
  */
-export function upsertWeightRecord(date: string, weight: number): void {
+export function setWeightMode(mode: WeightMode): void {
+  const data = getWeightData()
+  data.mode = mode
+  saveWeightData(data)
+}
+
+/**
+ * 新增或更新某日体重记录（多字段版）
+ * 若同一天已有记录则覆盖；传入字段按模式使用
+ * @param date - 日期字符串 'YYYY-MM-DD'
+ * @param fields - 记录字段（含 weight/morningWeight/noonWeight/eveningWeight）
+ */
+export function upsertWeightRecord(
+  date: string,
+  fields: Pick<WeightRecord, 'weight' | 'morningWeight' | 'noonWeight' | 'eveningWeight'>
+): void {
   const data = getWeightData()
   const idx = data.records.findIndex(r => r.date === date)
-  const record: WeightRecord = { date, weight, createdAt: Date.now() }
+  const record: WeightRecord = { date, createdAt: Date.now(), ...fields }
   if (idx >= 0) {
-    // 已存在则更新
+    // 已存在则保留 createdAt
+    record.createdAt = data.records[idx].createdAt
     data.records[idx] = record
   } else {
     // 不存在则追加
