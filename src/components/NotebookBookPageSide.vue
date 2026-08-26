@@ -79,6 +79,20 @@ const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
 
 /**
+ * 计算任务圆点的内联样式（用用户选定的颜色）
+ * 未设颜色时返回空对象，让 CSS class 走默认墨色
+ * @param todo - 待办事项
+ * @returns CSS 样式对象
+ */
+function getTaskCircleStyle(todo: Todo): Record<string, string> {
+  if (!todo.color) return {}
+  return {
+    borderColor: todo.color,
+    background: todo.done ? todo.color : 'transparent',
+  }
+}
+
+/**
  * 构建某一天的渲染数据
  * @param date - 日期字符串
  * @returns 单日渲染数据（含日记信息）
@@ -303,7 +317,7 @@ const sideData = computed<PageSideData | null>(() => {
                 class="task-item"
                 :class="{ done: todo.done }"
               >
-                <span class="task-circle" :class="{ filled: todo.done }"></span>
+                <span class="task-circle" :class="{ filled: todo.done }" :style="getTaskCircleStyle(todo)"></span>
                 <span class="task-text">{{ todo.text }}</span>
               </li>
             </ul>
@@ -327,7 +341,7 @@ const sideData = computed<PageSideData | null>(() => {
               class="task-item"
               :class="{ done: todo.done }"
             >
-              <span class="task-circle" :class="{ filled: todo.done }"></span>
+              <span class="task-circle" :class="{ filled: todo.done }" :style="getTaskCircleStyle(todo)"></span>
               <span class="task-text">{{ todo.text }}</span>
             </li>
           </ul>
@@ -511,20 +525,22 @@ const sideData = computed<PageSideData | null>(() => {
 }
 
 .task-circle.filled {
-  background: #EADFD9;
-  border-color: #8C7A6F;
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
 }
 
 .task-text {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-text-primary);
   line-height: 1.4;
   flex: 1;
 }
 
 .task-item.done .task-text {
-  color: var(--color-text-tertiary);
-  opacity: 0.55;
+  /* 完成后文字保持原色不变浅，只加横线划掉 */
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--color-text-secondary);
 }
 
 .day-empty {

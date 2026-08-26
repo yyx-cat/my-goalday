@@ -55,6 +55,20 @@ const emit = defineEmits<Emits>()
 const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
 
+/**
+ * 计算任务圆点的内联样式（用用户选定的颜色）
+ * 未设颜色时返回空对象，让 CSS class 走默认墨色
+ * @param todo - 待办事项
+ * @returns CSS 样式对象
+ */
+function getTaskCircleStyle(todo: Todo): Record<string, string> {
+  if (!todo.color) return {}
+  return {
+    borderColor: todo.color,
+    background: todo.done ? todo.color : 'transparent',
+  }
+}
+
 // 从父级 NotebookView 注入：双击日期跳转到日程记录视图并定位到该日期
 const jumpToScheduleRecord = inject<(date: string) => void>('jumpToScheduleRecord', () => {
   // 默认空函数：外层未 provide 时不报错
@@ -344,7 +358,7 @@ onMounted(() => {
                   class="task-item"
                   :class="{ done: todo.done }"
                 >
-                  <span class="task-circle" :class="{ filled: todo.done }"></span>
+                  <span class="task-circle" :class="{ filled: todo.done }" :style="getTaskCircleStyle(todo)"></span>
                   <span class="task-text">{{ todo.text }}</span>
                 </li>
               </ul>
@@ -365,7 +379,7 @@ onMounted(() => {
                 class="task-item"
                 :class="{ done: todo.done }"
               >
-                <span class="task-circle" :class="{ filled: todo.done }"></span>
+                <span class="task-circle" :class="{ filled: todo.done }" :style="getTaskCircleStyle(todo)"></span>
                 <span class="task-text">{{ todo.text }}</span>
               </li>
             </ul>
@@ -804,20 +818,22 @@ onMounted(() => {
 }
 
 .task-circle.filled {
-  background: #EADFD9;
-  border-color: #8C7A6F;
+  background: var(--color-text-primary);
+  border-color: var(--color-text-primary);
 }
 
 .task-text {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-text-primary);
   line-height: 1.4;
   flex: 1;
 }
 
 .task-item.done .task-text {
-  color: var(--color-text-tertiary);
-  opacity: 0.55;
+  /* 完成后文字保持原色不变浅，只加横线划掉 */
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--color-text-secondary);
 }
 
 .task-empty {

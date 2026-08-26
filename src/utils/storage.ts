@@ -53,14 +53,16 @@ function getTodayDate(): string {
  * 添加一条新的待办事项
  * @param text - 待办内容文本
  * @param date - 所属日期（可选，默认为今天），格式 'YYYY-MM-DD'
+ * @param color - 标签颜色（可选，空/未设表示用默认墨色），如 '#E07A5F'
  * @returns 新创建的待办事项对象
  */
-export function addTodo(text: string, date?: string): Todo {
+export function addTodo(text: string, date?: string, color?: string): Todo {
   const newTodo: Todo = {
     id: generateId(),
     text: text.trim(),
     done: false,
     date: date || getTodayDate(),
+    color: color || undefined,
     createdAt: new Date().toISOString(),
   }
   const todos = getTodos()

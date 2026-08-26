@@ -59,13 +59,28 @@ interface DayRow {
  * 正在创建中的新任务状态
  * @property key - 唯一标识（区分来源：date 日期 或 month 月份 或 'diary'）
  * @property text - 输入中文本
+ * @property color - 标签颜色（可选，空字符串表示用默认墨色），仅 date 任务用
  */
 interface EditingTask {
   key: string
   text: string
+  color?: string
 }
 
 // ========== 状态 ==========
+
+/**
+ * 任务可选颜色调色板（value 为空字符串表示用默认墨色）
+ * 创建待办时可选择一个，完成任务后圆点填充该颜色、文字加横线
+ */
+const TODO_COLORS: { value: string; label: string }[] = [
+  { value: '', label: '墨' },
+  { value: '#E07A5F', label: '珊瑚' },
+  { value: '#E09553', label: '橙' },
+  { value: '#6B9080', label: '青' },
+  { value: '#5B8DBE', label: '蓝' },
+  { value: '#8B7AB8', label: '紫' },
+]
 
 /** 当前激活的子标签（周/记录/清单/习惯） */
 const activeSubTab = ref<SubTab>('week')
@@ -218,7 +233,7 @@ async function startEditDate(date: string): Promise<void> {
     editInputRef.value?.focus()
     return
   }
-  editingTask.value = { key: date, text: '' }
+  editingTask.value = { key: date, text: '', color: '' }
   await nextTick()
   editInputRef.value?.focus()
 }
@@ -250,11 +265,25 @@ function commitEditingTask(): void {
     if (editingTask.value.key.startsWith('month:')) {
       monthlyTaskStore.addTask(text)
     } else {
-      // 按日期创建待办
-      todoStore.addTodo(text, editingTask.value.key)
+      // 按日期创建待办，带上用户选定的颜色
+      todoStore.addTodo(text, editingTask.value.key, editingTask.value.color)
     }
   }
   editingTask.value = null
+}
+
+/**
+ * 计算任务圆点的内联样式（用用户选定的颜色）
+ * 未设颜色时返回空对象，让 CSS class 走默认墨色
+ * @param todo - 待办事项
+ * @returns CSS 样式对象
+ */
+function getTodoDotStyle(todo: Todo): Record<string, string> {
+  if (!todo.color) return {}
+  return {
+    borderColor: todo.color,
+    background: todo.done ? todo.color : 'transparent',
+  }
 }
 
 /** 放弃正在编辑的任务（ESC） */
@@ -263,17 +292,21 @@ function cancelEditingTask(): void {
 }
 
 /** 编辑输入框失焦：空则丢弃，有内容则保存 */
+/**
+ * 失焦时提交正在编辑的任务（复用回车提交逻辑，保证颜色等参数一致不丢失）
+ */
 function handleEditBlur(): void {
-  if (!editingTask.value) return
-  const text = editingTask.value.text.trim()
-  if (text) {
-    if (editingTask.value.key.startsWith('month:')) {
-      monthlyTaskStore.addTask(text)
-    } else {
-      todoStore.addTodo(text, editingTask.value.key)
-    }
+  commitEditingTask()
+}
+
+/**
+ * 设置正在编辑任务的标签颜色（供颜色选择器调用）
+ * @param color - 颜色值，空字符串表示用默认墨色
+ */
+function setEditColor(color: string): void {
+  if (editingTask.value) {
+    editingTask.value.color = color
   }
-  editingTask.value = null
 }
 
 /** 判断某日期是否正在创建新待办 */
@@ -475,14 +508,14 @@ watch(
               :class="{ completed: todo.done }"
               @click.stop
             >
-              <button class="todo-dot" :class="{ filled: todo.done }" @click="handleToggleTodo(todo.id)"></button>
+              <button class="todo-dot" :class="{ filled: todo.done }" :style="getTodoDotStyle(todo)" @click="handleToggleTodo(todo.id)"></button>
               <span class="todo-text">{{ todo.text }}</span>
               <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
             </div>
 
             <!-- 正在创建的新任务 -->
             <div v-if="isEditingDate(row.date)" class="todo-item editing" @click.stop>
-              <span class="todo-dot"></span>
+              <span class="todo-dot" :style="{ borderColor: editingTask!.color || 'var(--color-text-primary)' }"></span>
               <input
                 ref="editInputRef"
                 v-model="editingTask!.text"
@@ -492,6 +525,18 @@ watch(
                 placeholder="写待办..."
                 class="edit-input"
               />
+              <!-- 颜色选择器：点击选色，影响圆点与完成态填充色 -->
+              <div class="color-picker" @mousedown.prevent @click.stop>
+                <button
+                  v-for="c in TODO_COLORS"
+                  :key="c.value"
+                  class="color-dot"
+                  :class="{ active: (editingTask!.color || '') === c.value }"
+                  :style="c.value ? { background: c.value } : { background: 'var(--color-text-primary)' }"
+                  :title="c.label"
+                  @click.stop="setEditColor(c.value)"
+                ></button>
+              </div>
             </div>
 
             <!-- 空提示 -->
@@ -960,8 +1005,10 @@ watch(
 }
 
 .todo-item.completed .todo-text {
-  color: var(--color-text-tertiary);
-  opacity: 0.55;
+  /* 完成后文字保持原色不变浅，只加横线划掉 */
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--color-text-secondary);
 }
 
 /* 圆点 */
@@ -977,8 +1024,9 @@ watch(
   transition: background 0.2s;
 }
 
+/* 完成态：圆点填充（无自定义颜色时用默认墨色；有颜色时由内联 style 覆盖） */
 .todo-dot.filled {
-  background: var(--color-bg-surface);
+  background: var(--color-text-primary);
 }
 
 .todo-item.editing .todo-dot {
@@ -988,10 +1036,37 @@ watch(
 
 .todo-text {
   flex: 1;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-text-primary);
   word-break: break-word;
   line-height: 1.4;
+}
+
+/* ========== 颜色选择器（创建任务时选色） ========== */
+.color-picker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.color-dot:hover {
+  transform: scale(1.12);
+}
+
+.color-dot.active {
+  border-color: var(--color-text-primary);
+  transform: scale(1.18);
 }
 
 .edit-input {

@@ -34,10 +34,11 @@ export const useTodoStore = defineStore('todo', () => {
    * 添加新待办
    * @param text - 待办内容文本
    * @param date - 所属日期（可选，默认今天）
+   * @param color - 标签颜色（可选，空/未设表示用默认墨色）
    */
-  function addTodo(text: string, date?: string): void {
+  function addTodo(text: string, date?: string, color?: string): void {
     if (!text.trim()) return
-    const newTodo = storageAddTodo(text, date)
+    const newTodo = storageAddTodo(text, date, color)
     todos.value.unshift(newTodo)
   }
 
