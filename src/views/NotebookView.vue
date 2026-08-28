@@ -212,6 +212,7 @@ watch(hasAnyData, (nowHas, had) => {
       <NotebookBookMode
         v-else
         :focus-date="currentFocusDate"
+        data-guide="notebook-pages"
         @change-mode="switchMode"
         @update:focus-date="handleFocusDateUpdate"
       />

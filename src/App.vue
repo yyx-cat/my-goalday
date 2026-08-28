@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, provide } from 'vue'
+import { ref, provide, onMounted } from 'vue'
+import { startOnboarding, hasSeenOnboarding } from '@/config/onboarding'
 import ScheduleView from '@/views/ScheduleView.vue'
 import NotebookView from '@/views/NotebookView.vue'
 import ProfileView from '@/views/ProfileView.vue'
@@ -71,6 +72,15 @@ function setGlobalTabBarHidden(hidden: boolean): void {
 provide<(tab: TabItem['key']) => void>('switchTab', switchActiveTab)
 provide<(hidden: boolean) => void>('setTabBarHidden', setGlobalTabBarHidden)
 provide<() => TabItem['key']>('getActiveTab', () => activeTab.value)
+
+/**
+ * 首次启动检测：未看过引导则延迟 500ms 弹出（等待页面渲染完成）
+ */
+onMounted(() => {
+  if (!hasSeenOnboarding()) {
+    setTimeout(startOnboarding, 500)
+  }
+})
 </script>
 
 <template>
@@ -95,6 +105,7 @@ provide<() => TabItem['key']>('getActiveTab', () => activeTab.value)
       <button
         v-for="tab in tabs"
         :key="tab.key"
+        :id="'tab-' + tab.key"
         class="tab-item"
         :class="{ active: activeTab === tab.key }"
         @click="activeTab = tab.key"

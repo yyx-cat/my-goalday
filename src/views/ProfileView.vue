@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
+import { startOnboarding } from '@/config/onboarding'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useHabitStore } from '@/store/modules/habitStore'
 import {
@@ -17,6 +18,17 @@ import {
 
 const todoStore = useTodoStore()
 const habitStore = useHabitStore()
+
+/** 切换全局 Tab 的方法（由 App.vue provide 注入） */
+const switchTab = inject<(tab: 'schedule' | 'notebook' | 'profile') => void>('switchTab')
+
+/**
+ * 查看新手引导：先切到日程 Tab 让今日卡片可见，再启动引导
+ */
+function handleViewOnboarding(): void {
+  switchTab?.('schedule')
+  setTimeout(startOnboarding, 300)
+}
 
 /**
  * 单条统计项数据结构
@@ -323,6 +335,19 @@ onMounted(() => {
         class="hidden-file"
         @change="handleImport"
       />
+    </section>
+
+    <!-- 帮助区 -->
+    <section class="section">
+      <h2 class="section-title">帮助</h2>
+      <div class="settings-list">
+        <div class="setting-item" @click="handleViewOnboarding">
+          <span class="setting-icon">📖</span>
+          <span class="setting-label">查看新手引导</span>
+          <span class="setting-value">重新学习</span>
+          <span class="setting-arrow">›</span>
+        </div>
+      </div>
     </section>
 
     <!-- 关于区 -->

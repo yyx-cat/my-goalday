@@ -510,8 +510,10 @@ watch(
         <div
           v-for="row in dayRows"
           :key="row.date"
-          class="day-block"
+          class="day-block day-card"
           :class="{ today: row.isToday }"
+          :data-today="row.isToday || undefined"
+          data-guide="day-card"
         >
           <!-- 日期标题行 -->
           <div class="day-header">
@@ -550,7 +552,8 @@ watch(
                 @keyup.esc="cancelEditingTask"
                 @blur="handleEditBlur"
                 placeholder="写待办..."
-                class="edit-input"
+                class="edit-input inline-input"
+                data-guide="task-input"
               />
               <!-- 颜色选择器：点击选色，影响圆点与完成态填充色 -->
               <div class="color-picker" @mousedown.prevent @click.stop>

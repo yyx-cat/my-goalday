@@ -2,7 +2,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useFinanceBudgetStore } from '@/store/modules/financeBudgetStore'
 import { useConfirmStore } from '@/store/modules/confirmStore'
-import { getTodayDate } from '@/utils/date'
 import type { BudgetCategory, BudgetExpense } from '@/types/financeBudget'
 
 /**
