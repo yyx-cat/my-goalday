@@ -5,6 +5,7 @@ import { useHabitStore } from '@/store/modules/habitStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
 import { useMonthlyTaskStore } from '@/store/modules/monthlyTaskStore'
 import { useWeightStore } from '@/store/modules/weightStore'
+import { useFinanceStore } from '@/store/modules/financeStore'
 import { useConfirmStore } from '@/store/modules/confirmStore'
 import HabitCheckInView from '@/components/habit/HabitCheckInView.vue'
 import HabitFinanceView from '@/components/habit/HabitFinanceView.vue'
@@ -21,12 +22,14 @@ import {
   formatMonthLabel,
 } from '@/utils/date'
 import type { Todo } from '@/types/todo'
+import type { MonthlyTask } from '@/types/monthlyTask'
 
 const todoStore = useTodoStore()
 const habitStore = useHabitStore()
 const diaryStore = useDiaryStore()
 const monthlyTaskStore = useMonthlyTaskStore()
 const weightStore = useWeightStore()
+const financeStore = useFinanceStore()
 const confirmStore = useConfirmStore()
 
 /**
@@ -339,9 +342,32 @@ async function handleDeleteTodo(id: string): Promise<void> {
   todoStore.deleteTodo(id)
 }
 
-/** 切换月度任务完成状态 */
-function handleToggleMonthTask(id: string): void {
+/**
+ * 切换月度任务完成状态（二次确认后划掉）
+ * @param id - 月度任务 id
+ */
+async function handleToggleMonthTask(id: string): Promise<void> {
+  const ok = await confirmStore.confirm({
+    title: '划掉月度任务',
+    message: '确认划掉这条月度任务吗？',
+    danger: false,
+  })
+  if (!ok) return
   monthlyTaskStore.toggleTask(id)
+}
+
+/**
+ * 将月度任务加入今日代办（二次确认）
+ * @param task - 月度任务
+ */
+async function handleAddMonthTaskToToday(task: MonthlyTask): Promise<void> {
+  const ok = await confirmStore.confirm({
+    title: '加入今日代办',
+    message: `是否将「${task.text}」加入今天的代办中？`,
+    danger: false,
+  })
+  if (!ok) return
+  todoStore.addTodo(task.text, getTodayDate())
 }
 
 /**
@@ -413,6 +439,7 @@ onMounted(() => {
   diaryStore.loadDiaries()
   monthlyTaskStore.loadTasks()
   weightStore.loadWeight()
+  financeStore.loadFinance()
 })
 
 /**
@@ -645,8 +672,9 @@ watch(
             :class="{ completed: task.done }"
             @click.stop
           >
-            <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
-            <span class="todo-text">{{ task.text }}</span>
+            <button class="todo-dot" :class="{ filled: task.done }" @click="handleAddMonthTaskToToday(task)"></button>
+            <span class="todo-text" @click="handleToggleMonthTask(task.id)">{{ task.text }}</span>
+            <button class="add-today-btn" @click="handleToggleMonthTask(task.id)" title="划掉任务">›</button>
             <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
           </div>
 
@@ -1040,6 +1068,32 @@ watch(
   color: var(--color-text-primary);
   word-break: break-word;
   line-height: 1.4;
+}
+
+/* 清单视图：点击文本可加入今日代办，显示手型 */
+.view-list .todo-text {
+  cursor: pointer;
+}
+
+/* 清单视图：右侧"加入今日"箭头按钮 */
+.add-today-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.add-today-btn:hover {
+  color: var(--color-text-primary);
 }
 
 /* ========== 颜色选择器（创建任务时选色） ========== */
