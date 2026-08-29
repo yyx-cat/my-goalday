@@ -1,73 +1,74 @@
-# 📒 我的手账本 - My GoalDay
+# 📒 MyGoalDay · 我的目标日
 
-> 一个手账风格的轻量级日程管理工具，让你像在纸上写字一样自然地管理待办事项。
+> 一款手账风格的极简目标管理应用 —— 用纸张的温度，记录每一天的小目标。
 
-[![Deploy to GitHub Pages](https://github.com/yyx-cat/my-goalday/actions/workflows/deploy.yml/badge.svg)](https://github.com/yyx-cat/my-goalday/actions/workflows/deploy.yml)
+MyGoalDay 是一个基于 **Vue 3 + TypeScript** 构建的纯前端单页应用。它将「日程待办」「手账总结」「个人中心」融合进一本虚拟的手账本：日程里记录的任务与数据会自动生成手账页面，支持拟真的 3D 翻页体验。所有数据保存在浏览器本地，无需注册登录，注重隐私与轻量。
 
----
+## ✨ 功能特性
 
-## 项目简介
+### 🗓️ 日程（Schedule）
+- **每日待办**：按周视图展开一周任务，点击空白处就地创建，支持自定义颜色标记，回车保存
+- **今日记录**：日记编辑器，支持心情标记与非今日日期保存提醒
+- **月度清单**：以月为单位的任务清单，支持划掉、加入今日待办与删除二次确认
+- **习惯管理**：
+  - 🎯 **习惯打卡**：自定义习惯 + 月历打卡，进度百分比统计
+  - 💰 **理财记账**：支出/收入记录，自动汇总结余，区块可折叠
+  - 📊 **理财管理**：自定义预算类型（名称/额度自由设定），自动扣减与剩余额度计算，超支浮动提醒
+  - ⚖️ **减重记录**：每日 / 早晚 / 三餐三种记录模式，自动计算体重变化趋势
+- **灵感模块**：内置与自建灵感集合，一键将灵感加入月度清单
+- **清单抽屉**：右下角箭头快速展开月度清单侧边栏
 
-**我的手账本** 是一个受 GoalDay 启发、采用 Vue 3 构建的纯前端日程管理应用。它摒弃了传统待办工具复杂的输入流程，通过「点击即创建、就地输入」的交互方式，让记录任务变得像在手账本上写字一样自然。
+### 📖 手账（Notebook）
+- **书本拟真**：封面 → 周总览 → 单日双页的 3D 翻页动画（`transform-style: preserve-3d` + 60fps GPU 加速）
+- **自动生成**：日程任务自动排版为手账页面，无需手动整理
+- **模块摘要**：月清单 / 收支 / 体重 / 打卡摘要可一键「添加到手账」，按日归档
+- **自适应排版**：内容过长时自动缩小字号，保证信息完整呈现
+- **双模式浏览**：索引模式（快速跳转）与书本模式（沉浸翻页）
 
-### 核心特色
+### 👤 我的（Profile）
+- 数据导出 / 导入（JSON 备份恢复）、一键清空（危险操作二次确认）
+- 随时重温新手引导
 
-- **多日期卡片视图**：默认展示最近7天，上下滑动查看更早日期，无限滚动加载
-- **就地添加任务**：点击卡片空白区域直接创建任务，输入框自动聚焦，按回车保存
-- **沉浸式任务管理**：完成任务时圆点变实心、文字变浅（不划掉），保持视觉整洁
-- **自动生成手账**：系统自动将每日任务汇总成翻页手账，点击左右翻页
-- **手账风格 UI**：米白暖灰配色、霞鹜文楷字体、纸张纹理质感
-- **本地数据存储**：所有数据存储在浏览器 localStorage，无需联网，打开即用
+### 🧭 其他
+- **新手引导**：基于 [Driver.js](https://driverjs.com/) 的分步高亮引导，首次启动自动弹出
+- **二次确认**：所有删除/危险操作均通过全局确认弹窗防护
 
----
+## 🛠️ 技术栈
 
-## 技术栈
+| 类别 | 技术 |
+| --- | --- |
+| 框架 | [Vue 3](https://vuejs.org/)（Composition API + `<script setup>`） |
+| 语言 | TypeScript（严格模式） |
+| 状态管理 | [Pinia](https://pinia.vuejs.org/)（单向数据流） |
+| 构建工具 | [Vite](https://vite.dev/) |
+| 样式 | 原生 CSS 变量 + [Tailwind CSS](https://tailwindcss.com/) |
+| 引导 | Driver.js |
+| 数据持久化 | localStorage（模块化键值设计） |
 
-| 技术 | 用途 |
-|------|------|
-| **Vue 3** (Composition API) | 前端框架 |
-| **TypeScript** | 类型安全 |
-| **Vite** | 构建工具 |
-| **Pinia** | 状态管理 |
-| **localStorage** | 数据持久化 |
-| **Tailwind CSS** | 样式基础 |
-| **vue-turnjs-flip** | 手账翻页效果 |
-| **GitHub Actions** | 自动化部署 |
+## 🏗️ 项目结构
 
----
+```
+src/
+├── components/          # 组件
+│   ├── common/          # 通用组件（添加到手账按钮等）
+│   ├── habit/           # 习惯子模块（打卡/理财/减重）
+│   ├── ConfirmDialog.vue    # 全局二次确认弹窗
+│   └── Notebook*.vue        # 手账书本模式组件
+├── config/              # 配置（新手引导步骤等）
+├── store/
+│   └── modules/         # Pinia 状态模块（一域一 store）
+├── types/               # TypeScript 类型定义（集中管理）
+├── utils/               # 存储与工具函数（localStorage CRUD）
+└── views/               # 页面级视图（日程/手账/我的/灵感）
+```
 
-## 截图
+> 架构约定：类型集中在 `types/`，存储逻辑在 `utils/`（每个数据域一个独立 localStorage key），组件只与 Pinia Store 通信，保证单向数据流。
 
-> 待补充截图
-
-| 日程页 | 手账页 | 我的页 |
-|--------|--------|--------|
-| ![日程页](./screenshots/schedule.png) | ![手账页](./screenshots/notebook.png) | ![我的页](./screenshots/profile.png) |
-
----
-
-## 在线体验
-
-项目已部署至 GitHub Pages，欢迎体验：
-
-[https://yyx-cat.github.io/my-goalday/](https://yyx-cat.github.io/my-goalday/)
-
-> 所有数据仅存储在本地浏览器，不会上传到任何服务器。
-
----
-
-## 本地运行
-
-### 环境要求
-
-- Node.js >= 18.0.0
-- npm 或 pnpm
-
-### 安装与启动
+## 🚀 快速开始
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yyx-cat/my-goalday.git
+# 克隆项目
+git clone https://github.com/<your-username>/my-goalday.git
 cd my-goalday
 
 # 安装依赖
@@ -79,87 +80,19 @@ npm run dev
 # 构建生产版本
 npm run build
 
-# 预览构建结果
+# 本地预览构建结果
 npm run preview
+
+# 部署到 GitHub Pages（可选）
+npm run deploy
 ```
 
----
+## 💾 数据说明
 
-## 项目结构
+- 所有数据存储于浏览器 `localStorage`，键名以 `my-goalday-` 前缀模块化隔离
+- 「我的」页面支持一键导出 JSON 备份与导入恢复，换浏览器不丢数据
+- 清空应用数据前请先导出备份
 
-```
-src/
-├── types/               # TypeScript 类型定义
-│   ├── todo.ts          # 待办事项接口
-│   ├── habit.ts         # 习惯打卡接口
-│   ├── diary.ts         # 日记接口
-│   └── notebook.ts      # 手账本配置接口
-│
-├── utils/               # 工具函数
-│   ├── date.ts          # 日期处理（格式化、加减、范围生成）
-│   ├── storage.ts       # 待办数据读写
-│   ├── habitStorage.ts  # 习惯数据读写
-│   └── notebookStorage.ts # 手账本配置读写
-│
-├── store/modules/       # Pinia 状态管理
-│   ├── todoStore.ts     # 待办状态
-│   ├── habitStore.ts    # 习惯状态
-│   └── notebookStore.ts # 手账本状态
-│
-├── views/               # 页面组件
-│   ├── ScheduleView.vue # 日程页（核心）
-│   ├── NotebookView.vue # 手账页（自动生成）
-│   └── ProfileView.vue  # 我的页
-│
-├── config/              # 配置文件
-│   └── templates.ts     # 预设手账本模版
-│
-├── App.vue              # 根组件（底部 Tab 布局）
-├── main.ts              # 入口文件
-└── style.css            # 全局样式
-```
+## 📄 License
 
----
-
-## 核心功能说明
-
-### 日程页
-
-- 默认加载最近 7 天的日期卡片
-- 点击卡片空白区域 → 自动创建任务输入框
-- 输入文字后按回车 → 保存任务
-- 点击圆点 → 切换任务完成状态
-
-### 手账页
-
-- 自动汇总所有有任务的日期
-- 每一页展示一天的完成情况（已完成/未完成）
-- 点击书页左右侧翻页
-- 翻页动画为左右翻页效果
-
-### 我的页
-
-- 统计概览（待办完成数、习惯数、日记数）
-- 数据导出/导入
-
----
-
-## 开发计划
-
-- [x] 多日期卡片视图 + 就地输入
-- [x] 自动生成翻页手账
-- [x] 本地数据持久化
-- [x] 底部 Tab 切换
-- [x] GitHub Pages 自动部署
-- [x] 习惯打卡模块
-- [×] 日记模块
-- [x] 数据导入/导出
-- [ ] 新手引导
-
----
-
-## 贡献
-
-本项目是个人学习与兴趣驱动的独立开发项目，欢迎 Fork 和 Star！
-
-如有建议或问题，欢迎提 Issue。
+[MIT](./LICENSE)
