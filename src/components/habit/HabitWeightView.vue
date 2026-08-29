@@ -8,6 +8,7 @@ import {
   parseDate,
 } from '@/utils/date'
 import type { WeightMode, WeightRecord } from '@/types/weight'
+import AddToNotebookButton from '@/components/common/AddToNotebookButton.vue'
 
 /**
  * 减重视图
@@ -22,6 +23,24 @@ const confirmStore = useConfirmStore()
 
 /** 今天日期字符串 */
 const today = getTodayDate()
+
+/**
+ * 收集今日体重摘要（用于添加到手账）
+ * 当天无体重记录时返回 null（不添加）
+ * @returns 摘要内容或 null
+ */
+function collectWeightToday(): { content: string } | null {
+  const weight = weightStore.getWeightByDate(today)
+  if (weight === null) return null
+  const change = weightStore.getDayChangeByDate(today)
+  let changeLine = ''
+  if (change && change.delta !== null) {
+    changeLine = `\n${change.deltaLabel} ${formatDelta(change.delta)} kg`
+  }
+  return {
+    content: `今日体重 ${weight} kg${changeLine}`,
+  }
+}
 
 /** 周一~周日 表头 */
 const weekHeaders = ['一', '二', '三', '四', '五', '六', '日']
@@ -417,6 +436,17 @@ function getDisplayValue(change: DayChange | null, idx: number): number | null {
         >{{ opt.label }}</button>
       </div>
 
+      <!-- 顶部操作行：添加到手账 -->
+      <div class="weight-action-row">
+        <AddToNotebookButton
+          source="weight"
+          title="⚖️ 体重记录"
+          :date="today"
+          :collect="collectWeightToday"
+          empty-hint="今天还没有记录体重，先去登记吧～"
+        />
+      </div>
+
       <!-- 月份导航 -->
       <div class="month-nav">
         <button class="month-nav-btn" @click="weightStore.goPrevMonth">‹</button>
@@ -745,6 +775,12 @@ function getDisplayValue(change: DayChange | null, idx: number): number | null {
   background: var(--color-text-primary);
   color: var(--color-bg-main);
   font-weight: var(--font-weight-medium);
+}
+
+/* 顶部操作行（添加到手账按钮右对齐） */
+.weight-action-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* 月份导航 */

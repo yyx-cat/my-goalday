@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
+import { useNotebookAddonStore } from '@/store/modules/notebookAddonStore'
 import { parseDate, getWeekDay, isToday } from '@/utils/date'
 import type { Todo } from '@/types/todo'
 import type { BookPage } from '@/types/notebook'
+import type { NotebookAddon } from '@/types/notebookAddon'
 
 /**
  * 单页内容渲染数据
@@ -24,6 +26,7 @@ import type { BookPage } from '@/types/notebook'
  * @property hasDiary       - 该日是否有日记内容
  * @property diaryContent   - 日记正文（hasDiary 为 true 时有效）
  * @property diaryMood      - 日记心情表情（可选）
+ * @property addons         - 该日各模块添加到手账的附加信息（月清单/理财/减重/打卡）
  */
 interface PageSideData {
   kind: 'cover' | 'overview' | 'day'
@@ -49,6 +52,7 @@ interface PageSideData {
   hasDiary: boolean
   diaryContent: string
   diaryMood: string
+  addons: NotebookAddon[]
 }
 
 /**
@@ -77,6 +81,13 @@ const props = defineProps<Props>()
 
 const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
+/** 手账附加信息 store（各模块添加到手账的摘要） */
+const addonStore = useNotebookAddonStore()
+
+// 挂载时加载附加信息（后续添加会由 store 内部刷新，响应式自动更新页面）
+onMounted(() => {
+  addonStore.loadAddons()
+})
 
 /**
  * 计算任务圆点的内联样式（用用户选定的颜色）
@@ -122,7 +133,19 @@ function buildDayData(date: string) {
     hasDiary,
     diaryContent,
     diaryMood,
+    addons: addonStore.getAddonsByDate(date),
   }
+}
+
+/**
+ * 附加信息字号分级：内容越长字号越小，保证都在页面内体现
+ * @param content - 附加信息正文
+ * @returns 字号类名（addon-md 正常 / addon-sm 偏小 / addon-xs 最小）
+ */
+function addonFontClass(content: string): string {
+  if (content.length > 220) return 'addon-xs'
+  if (content.length > 120) return 'addon-sm'
+  return 'addon-md'
 }
 
 /**
@@ -151,6 +174,7 @@ const sideData = computed<PageSideData | null>(() => {
       hasDiary: false,
       diaryContent: '',
       diaryMood: '',
+      addons: [],
     }
   }
 
@@ -188,6 +212,7 @@ const sideData = computed<PageSideData | null>(() => {
         hasDiary: false,
         diaryContent: '',
         diaryMood: '',
+        addons: [],
       }
     } else {
       // 右页：周一详情
@@ -351,6 +376,18 @@ const sideData = computed<PageSideData | null>(() => {
             <div class="day-empty-sub">写一件小目标吧~</div>
           </div>
         </template>
+
+        <!-- 各模块添加到手账的附加信息（月清单/理财/减重/打卡摘要） -->
+        <div v-if="sideData.addons.length > 0" class="addon-area">
+          <div
+            v-for="addon in sideData.addons"
+            :key="addon.id"
+            class="addon-block"
+          >
+            <div class="addon-title">{{ addon.title }}</div>
+            <div class="addon-content" :class="addonFontClass(addon.content)">{{ addon.content }}</div>
+          </div>
+        </div>
       </div>
     </template>
   </div>
@@ -726,6 +763,55 @@ const sideData = computed<PageSideData | null>(() => {
   height: 100%;
   background: linear-gradient(90deg, #E5C8B6 0%, #C9A58E 100%);
   transition: width 0.3s ease;
+}
+
+/* ========== 各模块附加信息区（月清单/理财/减重/打卡摘要） ========== */
+.addon-area {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.addon-block {
+  background: rgba(234, 223, 217, 0.35);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.addon-title {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+  font-weight: 600;
+}
+
+.addon-content {
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  font-family: var(--font-family-sans);
+}
+
+/* 字号自适应：内容越长字号越小 */
+.addon-content.addon-md {
+  font-size: 12px;
+}
+
+.addon-content.addon-sm {
+  font-size: 10.5px;
+}
+
+.addon-content.addon-xs {
+  font-size: 9.5px;
+  line-height: 1.4;
 }
 
 /* ========== 移动端适配 ========== */

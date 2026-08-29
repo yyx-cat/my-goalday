@@ -5,6 +5,7 @@ import { useConfirmStore } from '@/store/modules/confirmStore'
 import { getTodayDate } from '@/utils/date'
 import type { FinanceMode, FinanceRecord, FinanceRecordType } from '@/types/finance'
 import HabitFinanceManageView from '@/components/habit/HabitFinanceManageView.vue'
+import AddToNotebookButton from '@/components/common/AddToNotebookButton.vue'
 
 /**
  * 理财界面
@@ -34,6 +35,30 @@ const formNote = ref<string>('')
 
 /** 新记录日期输入（默认今天） */
 const formDate = ref<string>(getTodayDate())
+
+/**
+ * 收集今日收支摘要（用于添加到手账）
+ * 当天无记账记录时返回 null（不添加）
+ * @returns 摘要内容或 null
+ */
+function collectFinanceToday(): { content: string } | null {
+  const today = getTodayDate()
+  const list = financeStore.records.filter(r => r.date === today)
+  if (list.length === 0) return null
+  const expenseSum = list
+    .filter(r => r.type === 'expense')
+    .reduce((sum, r) => sum + r.amount, 0)
+  const incomeSum = list
+    .filter(r => r.type === 'income')
+    .reduce((sum, r) => sum + r.amount, 0)
+  const lines = list.map(r => {
+    const sign = r.type === 'expense' ? '-' : '+'
+    return `${sign}¥${r.amount.toFixed(2)}${r.note ? `（${r.note}）` : ''}`
+  })
+  return {
+    content: `支出 ¥${expenseSum.toFixed(2)} · 收入 ¥${incomeSum.toFixed(2)}\n${lines.join('\n')}`,
+  }
+}
 
 /** 支出区块是否折叠 */
 const expenseCollapsed = ref<boolean>(false)
@@ -192,6 +217,17 @@ function balanceClass(n: number): string {
 
     <!-- 记账模式 -->
     <div v-if="activeMode === 'book'" class="book-mode">
+      <!-- 顶部操作行：添加到手账 -->
+      <div class="book-action-row">
+        <AddToNotebookButton
+          source="finance"
+          title="💰 今日收支"
+          :date="getTodayDate()"
+          :collect="collectFinanceToday"
+          empty-hint="今天还没有记账记录，先去添加一笔吧～"
+        />
+      </div>
+
       <!-- 统计卡片 -->
       <div class="stats-row">
         <div class="stat-card expense">
@@ -370,6 +406,12 @@ function balanceClass(n: number): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 顶部操作行（添加到手账按钮右对齐） */
+.book-action-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* 统计卡片行 */

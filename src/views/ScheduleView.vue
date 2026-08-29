@@ -11,6 +11,7 @@ import HabitCheckInView from '@/components/habit/HabitCheckInView.vue'
 import HabitFinanceView from '@/components/habit/HabitFinanceView.vue'
 import HabitWeightView from '@/components/habit/HabitWeightView.vue'
 import InspirationView from '@/views/InspirationView.vue'
+import AddToNotebookButton from '@/components/common/AddToNotebookButton.vue'
 import {
   getTodayDate,
   addDays,
@@ -112,6 +113,21 @@ const drawerOpen = ref<boolean>(false)
 
 /** 灵感模块视图是否打开（全屏覆盖） */
 const inspirationOpen = ref<boolean>(false)
+
+/**
+ * 收集月度清单摘要（用于添加到手账）
+ * 本月清单无任务时返回 null（不添加）
+ * @returns 摘要内容或 null
+ */
+function collectMonthlyList(): { content: string } | null {
+  const tasks = monthlyTaskStore.monthTasks
+  if (tasks.length === 0) return null
+  const doneCount = tasks.filter(t => t.done).length
+  const lines = tasks.map(t => `${t.done ? '✓' : '○'} ${t.text}`)
+  return {
+    content: `本月完成 ${doneCount}/${tasks.length}\n${lines.join('\n')}`,
+  }
+}
 
 /** 记录视图：日期选择器是否展开 */
 const diaryDatePickerShow = ref<boolean>(false)
@@ -782,7 +798,16 @@ watch(
               <span class="drawer-month-label">{{ monthLabel }}</span>
               <button class="drawer-nav-btn" @click="goNextMonth">›</button>
             </div>
-            <button class="drawer-close" @click="toggleDrawer">✕</button>
+            <div class="drawer-header-actions">
+              <AddToNotebookButton
+                source="monthly-list"
+                title="📋 月度清单"
+                :date="getTodayDate()"
+                :collect="collectMonthlyList"
+                empty-hint="本月清单还没有任务，先去添加吧～"
+              />
+              <button class="drawer-close" @click="toggleDrawer">✕</button>
+            </div>
           </div>
 
           <!-- 抽屉统计 -->
@@ -1678,6 +1703,13 @@ watch(
   font-size: 14px;
   cursor: pointer;
   padding: 0;
+}
+
+/* 抽屉头部右侧操作区（添加到手账 + 关闭） */
+.drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .drawer-stats {

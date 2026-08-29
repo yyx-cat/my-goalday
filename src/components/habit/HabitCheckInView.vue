@@ -10,6 +10,7 @@ import {
   getMonthDates,
 } from '@/utils/date'
 import HabitCalendar from './HabitCalendar.vue'
+import AddToNotebookButton from '@/components/common/AddToNotebookButton.vue'
 
 /**
  * 习惯打卡视图
@@ -23,6 +24,22 @@ const confirmStore = useConfirmStore()
 
 /** 今天日期字符串 */
 const today = getTodayDate()
+
+/**
+ * 收集今日打卡摘要（用于添加到手账）
+ * 今天没有任何习惯打卡时返回 null（不添加）
+ * @returns 摘要内容或 null
+ */
+function collectHabitToday(): { content: string } | null {
+  const lines: string[] = []
+  for (const habit of habitStore.habits) {
+    if (habit.checkIns.includes(today)) {
+      lines.push(`✓ ${habit.icon || '🎯'} ${habit.name}`)
+    }
+  }
+  if (lines.length === 0) return null
+  return { content: lines.join('\n') }
+}
 
 /** 当前展开的习惯 id（同时只展开一个，null 表示全收起） */
 const expandedHabitId = ref<string | null>(null)
@@ -211,6 +228,17 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
 
 <template>
   <div class="check-in-view">
+    <!-- 顶部操作行：添加到手账 -->
+    <div class="habit-action-row">
+      <AddToNotebookButton
+        source="habit"
+        title="🎯 今日打卡"
+        :date="today"
+        :collect="collectHabitToday"
+        empty-hint="今天还没有习惯打卡记录，先去打卡吧～"
+      />
+    </div>
+
     <!-- 习惯列表区域 -->
     <div class="habit-list" @click="startCreateHabit">
       <div
@@ -326,6 +354,14 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+/* 顶部操作行（添加到手账按钮右对齐） */
+.habit-action-row {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding-bottom: 8px;
 }
 
 /* 习惯列表区（点击空白处创建） */
