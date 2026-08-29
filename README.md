@@ -33,6 +33,10 @@ MyGoalDay 是一个基于 **Vue 3 + TypeScript** 构建的纯前端单页应用�
 - **新手引导**：基于 [Driver.js](https://driverjs.com/) 的分步高亮引导，首次启动自动弹出
 - **二次确认**：所有删除/危险操作均通过全局确认弹窗防护
 
+### 在线体验
+项目已部署至 GitHub Pages，欢迎体验：
+https://yyx-cat.github.io/my-goalday/
+
 ## 技术栈
 
 | 类别 | 技术 |
