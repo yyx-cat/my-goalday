@@ -10,6 +10,7 @@ import { useConfirmStore } from '@/store/modules/confirmStore'
 import HabitCheckInView from '@/components/habit/HabitCheckInView.vue'
 import HabitFinanceView from '@/components/habit/HabitFinanceView.vue'
 import HabitWeightView from '@/components/habit/HabitWeightView.vue'
+import InspirationView from '@/views/InspirationView.vue'
 import {
   getTodayDate,
   addDays,
@@ -108,6 +109,9 @@ const diaryModified = ref<boolean>(false)
 
 /** 右下角清单抽屉是否展开 */
 const drawerOpen = ref<boolean>(false)
+
+/** 灵感模块视图是否打开（全屏覆盖） */
+const inspirationOpen = ref<boolean>(false)
 
 /** 记录视图：日期选择器是否展开 */
 const diaryDatePickerShow = ref<boolean>(false)
@@ -738,18 +742,31 @@ watch(
       </div>
     </div>
 
-    <!-- 右下角折叠箭头：展开清单抽屉 -->
-    <button
-      class="drawer-toggle"
-      :class="{ open: drawerOpen }"
-      @click="toggleDrawer"
-      :aria-label="drawerOpen ? '收起清单' : '展开清单'"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline v-if="drawerOpen" points="9 6 15 12 9 18" />
-        <polyline v-else points="15 6 9 12 15 18" />
-      </svg>
-    </button>
+    <!-- 右下角浮动按钮组：清单抽屉箭头 + 灵感入口 -->
+    <div class="float-btn-group">
+      <!-- 灵感模块入口（💡 圆圈） -->
+      <button
+        class="inspiration-btn"
+        @click="inspirationOpen = true"
+        aria-label="打开灵感模块"
+        title="灵感模块"
+      >💡</button>
+      <!-- 清单抽屉折叠箭头 -->
+      <button
+        class="drawer-toggle"
+        :class="{ open: drawerOpen }"
+        @click="toggleDrawer"
+        :aria-label="drawerOpen ? '收起清单' : '展开清单'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline v-if="drawerOpen" points="9 6 15 12 9 18" />
+          <polyline v-else points="15 6 9 12 15 18" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- 灵感模块全屏视图 -->
+    <InspirationView v-if="inspirationOpen" @close="inspirationOpen = false" />
 
     <!-- 清单抽屉（右侧滑出） -->
     <Teleport to="body">
@@ -1515,11 +1532,41 @@ watch(
   flex-direction: column;
 }
 
-/* ========== 右下角抽屉切换按钮 ========== */
-.drawer-toggle {
+/* ========== 右下角浮动按钮组（灵感入口 + 抽屉箭头） ========== */
+.float-btn-group {
   position: fixed;
   right: 16px;
   bottom: 76px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.inspiration-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: #fff;
+  border: 1px solid var(--color-border-divider);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.inspiration-btn:hover {
+  transform: scale(1.05);
+}
+
+/* ========== 右下角抽屉切换按钮 ========== */
+.drawer-toggle {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-full);
@@ -1530,7 +1577,6 @@ watch(
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 50;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s;
   padding: 0;
@@ -1692,7 +1738,7 @@ watch(
     opacity: 0.4;
   }
 
-  .drawer-toggle {
+  .float-btn-group {
     bottom: 72px;
     right: 12px;
   }
