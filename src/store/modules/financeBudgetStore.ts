@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { BudgetCategory, BudgetData, BudgetExpense } from '@/types/financeBudget'
 import {
   getBudgetData,
@@ -9,7 +9,18 @@ import {
   addBudgetExpense,
   deleteBudgetExpense,
 } from '@/utils/financeBudgetStorage'
-import { getTodayDate, getMonthKey } from '@/utils/date'
+import {
+  getFinanceConfig,
+  setMonthStartDay as configSetMonthStartDay,
+} from '@/utils/financeConfig'
+import {
+  getTodayDate,
+  getMonthKey,
+  getBillingPeriod,
+  isDateInBillingPeriod,
+  formatBillingPeriodLabel,
+  type BillingPeriod,
+} from '@/utils/date'
 
 /**
  * 将数值四舍五入到两位小数
@@ -23,6 +34,7 @@ function round2(n: number): number {
 /**
  * 预算管理状态管理 Store
  * 管理用户自定义预算类型与每月消费记录，提供剩余额度计算
+ * 支持自定义账期起始日（如每月 5 号到次月 4 号为一个账期）
  */
 export const useFinanceBudgetStore = defineStore('financeBudget', () => {
   /** 预算管理数据 */
@@ -31,12 +43,35 @@ export const useFinanceBudgetStore = defineStore('financeBudget', () => {
     expenses: [],
   })
 
+  /** 账期起始日（1-28，默认 1 即自然月） */
+  const monthStartDay = ref<number>(1)
+
   /**
-   * 从 localStorage 加载预算数据到内存
+   * 从 localStorage 加载预算数据与账期配置到内存
    */
   function loadBudget(): void {
     data.value = getBudgetData()
+    monthStartDay.value = getFinanceConfig().monthStartDay
   }
+
+  /**
+   * 设置账期起始日（1-28）
+   * @param day - 起始日
+   */
+  function setMonthStartDay(day: number): void {
+    configSetMonthStartDay(day)
+    monthStartDay.value = getFinanceConfig().monthStartDay
+  }
+
+  /** 当前账期范围（基于今天计算） */
+  const currentPeriod = computed<BillingPeriod>(() =>
+    getBillingPeriod(getTodayDate(), monthStartDay.value),
+  )
+
+  /** 当前账期中文展示文本（如 "8月5日 - 9月4日"） */
+  const currentPeriodLabel = computed<string>(() =>
+    formatBillingPeriodLabel(currentPeriod.value),
+  )
 
   /**
    * 新增预算类型
@@ -103,21 +138,24 @@ export const useFinanceBudgetStore = defineStore('financeBudget', () => {
   }
 
   /**
-   * 获取某类型本月消费记录（按创建时间倒序）
+   * 获取某类型本账期消费记录（按创建时间倒序）
+   * 按账期范围过滤（兼容自定义起始日）
    * @param categoryId - 类型唯一标识
-   * @returns 本月消费记录数组
+   * @returns 本账期消费记录数组
    */
   function getCategoryExpenses(categoryId: string): BudgetExpense[] {
-    const month = getMonthKey()
+    const period = currentPeriod.value
     return data.value.expenses
-      .filter(e => e.categoryId === categoryId && e.month === month)
+      .filter(
+        e => e.categoryId === categoryId && isDateInBillingPeriod(e.date, period),
+      )
       .sort((a, b) => b.createdAt - a.createdAt)
   }
 
   /**
-   * 获取某类型本月已消费总额
+   * 获取某类型本账期已消费总额
    * @param categoryId - 类型唯一标识
-   * @returns 本月已消费金额
+   * @returns 本账期已消费金额
    */
   function getCategorySpent(categoryId: string): number {
     return round2(
@@ -126,7 +164,7 @@ export const useFinanceBudgetStore = defineStore('financeBudget', () => {
   }
 
   /**
-   * 获取某类型本月剩余额度（预算 - 已花；可为负）
+   * 获取某类型本账期剩余额度（预算 - 已花；可为负）
    * @param categoryId - 类型唯一标识
    * @returns 剩余额度
    */
@@ -139,8 +177,12 @@ export const useFinanceBudgetStore = defineStore('financeBudget', () => {
   return {
     // 状态
     data,
+    monthStartDay,
+    currentPeriod,
+    currentPeriodLabel,
     // 方法
     loadBudget,
+    setMonthStartDay,
     addCategory,
     updateCategory,
     removeCategory,

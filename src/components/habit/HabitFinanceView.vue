@@ -36,6 +36,43 @@ const formNote = ref<string>('')
 /** 新记录日期输入（默认今天） */
 const formDate = ref<string>(getTodayDate())
 
+/** 是否显示账期设置面板 */
+const showPeriodSetup = ref<boolean>(false)
+
+/** 账期起始日输入（设置面板内临时值） */
+const newStartDayInput = ref<string>('1')
+
+/** 当前账期中文展示（如 "8月5日 - 9月4日"） */
+const periodLabel = computed<string>(() => financeStore.currentPeriodLabel)
+
+/** 当前账期起始日 */
+const startDay = computed<number>(() => financeStore.monthStartDay)
+
+/**
+ * 打开账期设置面板（加载当前起始日）
+ */
+function openPeriodSetup(): void {
+  newStartDayInput.value = String(financeStore.monthStartDay)
+  showPeriodSetup.value = true
+}
+
+/**
+ * 取消账期设置
+ */
+function cancelPeriodSetup(): void {
+  showPeriodSetup.value = false
+}
+
+/**
+ * 确认账期设置（校验 1-28 后写入，记账与管理共用）
+ */
+function confirmPeriodSetup(): void {
+  const day = parseInt(newStartDayInput.value, 10)
+  if (Number.isNaN(day) || day < 1 || day > 28) return
+  financeStore.setMonthStartDay(day)
+  showPeriodSetup.value = false
+}
+
 /**
  * 收集今日收支摘要（用于添加到手账）
  * 当天无记账记录时返回 null（不添加）
@@ -215,6 +252,35 @@ function balanceClass(n: number): string {
       >{{ opt.label }}</button>
     </div>
 
+    <!-- 账期信息条（显示当前账期范围 + 设置入口） -->
+    <div class="period-bar">
+      <span class="period-label">📅 本期账期</span>
+      <span class="period-range">{{ periodLabel }}</span>
+      <span class="period-start">每月 {{ startDay }} 号起</span>
+      <button class="period-setup-btn" @click="openPeriodSetup">设置</button>
+    </div>
+
+    <!-- 账期设置面板 -->
+    <div v-if="showPeriodSetup" class="period-setup" @click.stop>
+      <div class="period-setup-title">自定义账期起始日</div>
+      <div class="period-setup-desc">设置每月从几号开始算账（1-28 号）。例如设为 5 号，则 8 月 5 日 ~ 9 月 4 日为一个账期。</div>
+      <div class="period-setup-input-row">
+        <span class="period-setup-prefix">每月</span>
+        <input
+          v-model="newStartDayInput"
+          type="number"
+          min="1"
+          max="28"
+          class="period-setup-input"
+        />
+        <span class="period-setup-suffix">号起</span>
+      </div>
+      <div class="form-actions">
+        <button class="form-confirm" @click="confirmPeriodSetup">确认</button>
+        <button class="form-cancel" @click="cancelPeriodSetup">取消</button>
+      </div>
+    </div>
+
     <!-- 记账模式 -->
     <div v-if="activeMode === 'book'" class="book-mode">
       <!-- 顶部操作行：添加到手账 -->
@@ -231,15 +297,15 @@ function balanceClass(n: number): string {
       <!-- 统计卡片 -->
       <div class="stats-row">
         <div class="stat-card expense">
-          <span class="stat-label">总支出</span>
+          <span class="stat-label">本期支出</span>
           <span class="stat-value">{{ formatMoney(totalExpense) }}</span>
         </div>
         <div class="stat-card income">
-          <span class="stat-label">总收入</span>
+          <span class="stat-label">本期收入</span>
           <span class="stat-value">{{ formatMoney(totalIncome) }}</span>
         </div>
         <div class="stat-card balance">
-          <span class="stat-label">结余</span>
+          <span class="stat-label">本期结余</span>
           <span class="stat-value" :class="balanceClass(balance)">{{ formatBalance(balance) }}</span>
         </div>
       </div>
@@ -399,6 +465,96 @@ function balanceClass(n: number): string {
   background: var(--color-text-primary);
   color: var(--color-bg-main);
   font-weight: var(--font-weight-medium);
+}
+
+/* ========== 账期信息条 ========== */
+.period-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 10px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.period-label {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.period-range {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-bold);
+  flex: 1;
+  min-width: 0;
+}
+
+.period-start {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}
+
+.period-setup-btn {
+  border: 1px solid var(--color-text-primary);
+  background: transparent;
+  color: var(--color-text-primary);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+  flex-shrink: 0;
+}
+
+/* 账期设置面板 */
+.period-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 10px;
+}
+
+.period-setup-title {
+  font-size: 14px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.period-setup-desc {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+}
+
+.period-setup-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-setup-prefix,
+.period-setup-suffix {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.period-setup-input {
+  width: 70px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  outline: none;
+  background: var(--color-bg-main);
+  text-align: center;
 }
 
 /* ========== 记账模式 ========== */

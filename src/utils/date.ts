@@ -295,3 +295,72 @@ export function getWeekStartsInYear(year: number): string[] {
 
   return weekStarts
 }
+
+/**
+ * 自定义账期范围（用于理财自定义起始日，如每月 5 号到次月 4 号）
+ * @property start - 账期起始日期 'YYYY-MM-DD'（含）
+ * @property end   - 账期结束日期 'YYYY-MM-DD'（含）
+ * @property key   - 账期键 'YYYY-MM'（以起始日所在月份标识，便于分组）
+ */
+export interface BillingPeriod {
+  start: string
+  end: string
+  key: string
+}
+
+/**
+ * 根据自定义起始日，计算某天所属账期的起止日期与键
+ * 规则：账期从 startDay 号开始，到下个月 startDay - 1 号结束
+ *   - 若 startDay = 1，等价于自然月（1 号 ~ 月末）
+ *   - 若当天日期 >= startDay，则属于本月 startDay ~ 下月 (startDay-1)
+ *   - 若当天日期 <  startDay，则属于上月 startDay ~ 本月 (startDay-1)
+ * @param dateStr  - 任意日期字符串 'YYYY-MM-DD'（可选，默认今天）
+ * @param startDay - 账期起始日（1-28，超出范围按 1 处理）
+ * @returns 账期范围 { start, end, key }
+ */
+export function getBillingPeriod(
+  dateStr: string = getTodayDate(),
+  startDay: number = 1,
+): BillingPeriod {
+  // 起始日限制在 1-28 之间（避免 29/30/31 因 2 月不存在导致边界问题）
+  const day = Math.min(Math.max(Math.floor(startDay) || 1, 1), 28)
+  const date = parseDate(dateStr)
+  const year = date.getFullYear()
+  const month = date.getMonth() // 0-based
+  const dom = date.getDate() // 当月几号
+
+  // 该日期所属账期的起始月（0-based）
+  const periodStartMonth = dom >= day ? month : month - 1
+  // 起始日期对象
+  const start = new Date(year, periodStartMonth, day)
+  // 结束日期 = 起始日的次月同日 - 1 天
+  const end = new Date(year, periodStartMonth + 1, day)
+  end.setDate(end.getDate() - 1)
+
+  return {
+    start: formatDate(start),
+    end: formatDate(end),
+    key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+  }
+}
+
+/**
+ * 将账期范围格式化为中文展示文本（如 "8月5日 - 9月4日"）
+ * @param period - 账期范围
+ * @returns 中文展示文本
+ */
+export function formatBillingPeriodLabel(period: BillingPeriod): string {
+  const s = parseDate(period.start)
+  const e = parseDate(period.end)
+  return `${s.getMonth() + 1}月${s.getDate()}日 - ${e.getMonth() + 1}月${e.getDate()}日`
+}
+
+/**
+ * 判断某天是否在指定账期范围内（含起止）
+ * @param dateStr - 待判断日期字符串 'YYYY-MM-DD'
+ * @param period  - 账期范围
+ * @returns 是否在范围内
+ */
+export function isDateInBillingPeriod(dateStr: string, period: BillingPeriod): boolean {
+  return dateStr >= period.start && dateStr <= period.end
+}
