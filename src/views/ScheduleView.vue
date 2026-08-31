@@ -589,9 +589,17 @@ watch(
               </div>
             </div>
 
-            <!-- 空提示 -->
+            <!-- 空提示：当天无任务时显示创建入口 -->
             <div v-if="row.todos.length === 0 && !isEditingDate(row.date)" class="empty-tip">
               点击此处创建任务
+            </div>
+
+            <!-- 已有任务时，下方额外提供一个明确的"继续添加"入口，避免用户找不到点击处 -->
+            <div
+              v-if="row.todos.length > 0 && !isEditingDate(row.date)"
+              class="continue-add-tip"
+              @click.stop="startEditDate(row.date)"
+            >
             </div>
           </div>
         </div>
@@ -1191,6 +1199,39 @@ watch(
   padding: 12px 8px;
   color: var(--color-text-tertiary);
   font-size: 13px;
+}
+
+/* 已有任务时的"继续添加代办"入口，始终可点击，消除找不到入口的问题 */
+.continue-add-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.continue-add-tip:hover {
+  background: rgba(78, 63, 55, 0.05);
+  color: var(--color-text-secondary);
+}
+
+.continue-add-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-text-tertiary);
+  flex-shrink: 0;
+  margin-left: 3px;
+}
+
+.continue-add-text {
+  flex: 1;
+  min-width: 0;
+  font-style: italic;
 }
 
 /* ========== 记录视图：日记 ========== */
