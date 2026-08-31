@@ -695,9 +695,8 @@ watch(
             :class="{ completed: task.done }"
             @click.stop
           >
-            <button class="todo-dot" :class="{ filled: task.done }" @click="handleAddMonthTaskToToday(task)"></button>
-            <span class="todo-text" @click="handleToggleMonthTask(task.id)">{{ task.text }}</span>
-            <button class="add-today-btn" @click="handleToggleMonthTask(task.id)" title="划掉任务">›</button>
+            <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
+            <span class="todo-text">{{ task.text }}</span>
             <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
           </div>
 
@@ -822,9 +821,8 @@ watch(
               :class="{ completed: task.done }"
               @click.stop
             >
-              <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
-              <span class="todo-text">{{ task.text }}</span>
-              <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
+              <button class="todo-dot" :class="{ filled: task.done }" @click="handleAddMonthTaskToToday(task)"></button>
+              <span class="todo-text" @click="handleAddMonthTaskToToday(task)">{{ task.text }}</span>
             </div>
 
             <div v-if="isEditingMonth()" class="todo-item editing" @click.stop>
@@ -1115,30 +1113,9 @@ watch(
   line-height: 1.4;
 }
 
-/* 清单视图：点击文本可加入今日代办，显示手型 */
-.view-list .todo-text {
+/* 抽屉清单：任务文本可点击加入今日代办 */
+.drawer-tasks .todo-text {
   cursor: pointer;
-}
-
-/* 清单视图：右侧"加入今日"箭头按钮 */
-.add-today-btn {
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 0;
-  transition: color 0.15s;
-}
-
-.add-today-btn:hover {
-  color: var(--color-text-primary);
 }
 
 /* ========== 颜色选择器（创建任务时选色） ========== */
