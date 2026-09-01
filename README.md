@@ -72,7 +72,7 @@ src/
 
 ```bash
 # 克隆项目
-git clone https://github.com/<your-username>/my-goalday.git
+git clone https://github.com/yyx-cat/my-goalday.git
 cd my-goalday
 
 # 安装依赖
