@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch, inject } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
+import { useNotebookAddonStore } from '@/store/modules/notebookAddonStore'
 import {
   getTodayDate,
   addDays,
@@ -12,6 +13,7 @@ import {
   isToday,
 } from '@/utils/date'
 import type { Todo } from '@/types/todo'
+import type { NotebookAddon } from '@/types/notebookAddon'
 
 /**
  * 心情表情映射：把 Mood 字符串转成可读表情
@@ -54,6 +56,8 @@ const emit = defineEmits<Emits>()
 
 const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
+/** 手账附加信息 store（各模块添加到手账的摘要，书本/索引两模式共用同一数据） */
+const addonStore = useNotebookAddonStore()
 
 /**
  * 计算任务圆点的内联样式（用用户选定的颜色）
@@ -179,6 +183,25 @@ const weekProgress = computed<number>(() => {
   return Math.round(sum / weekDays.value.length)
 })
 
+/**
+ * 选中日期的各模块附加信息（月清单/理财/减重/打卡摘要）
+ * 响应式：addonStore 数据变化自动更新
+ */
+const selectedAddons = computed<NotebookAddon[]>(() => {
+  return addonStore.getAddonsByDate(selectedDate.value)
+})
+
+/**
+ * 附加信息字号分级：内容越长字号越小，保证都在页面内体现
+ * @param content - 附加信息正文
+ * @returns 字号类名（addon-md 正常 / addon-sm 偏小 / addon-xs 最小）
+ */
+function addonFontClass(content: string): string {
+  if (content.length > 220) return 'addon-xs'
+  if (content.length > 120) return 'addon-sm'
+  return 'addon-md'
+}
+
 // ========== 方法 ==========
 
 /**
@@ -255,6 +278,8 @@ onMounted(() => {
   if (diaryStore.diaries.length === 0) {
     diaryStore.loadDiaries()
   }
+  // 加载各模块添加到手账的附加信息（与书本模式共用数据源）
+  addonStore.loadAddons()
   // 初始聚焦日期：优先 props.focusDate → props.initialDate → 今天
   const initialFocus = props.focusDate || props.initialDate || getTodayDate()
   if (initialFocus && initialFocus !== selectedDate.value) {
@@ -385,6 +410,18 @@ onMounted(() => {
             </ul>
             <div v-else class="task-empty">这一天还没有任务</div>
           </template>
+
+          <!-- 各模块添加到手账的附加信息（月清单/理财/减重/打卡摘要，与书本模式一致） -->
+          <div v-if="selectedAddons.length > 0" class="addon-area">
+            <div
+              v-for="addon in selectedAddons"
+              :key="addon.id"
+              class="addon-block"
+            >
+              <div class="addon-title">{{ addon.title }}</div>
+              <div class="addon-content" :class="addonFontClass(addon.content)">{{ addon.content }}</div>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -845,6 +882,54 @@ onMounted(() => {
   padding: 20px;
   font-size: 13px;
   color: var(--color-text-tertiary);
+}
+
+/* ========== 各模块附加信息区（月清单/理财/减重/打卡摘要，与书本模式同款） ========== */
+.addon-area {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  max-height: 35%;
+  overflow-y: auto;
+}
+
+.addon-block {
+  background: rgba(234, 223, 217, 0.35);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.addon-title {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+  font-weight: 600;
+}
+
+.addon-content {
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  font-family: var(--font-family-sans);
+}
+
+/* 字号自适应：内容越长字号越小 */
+.addon-content.addon-md {
+  font-size: 12px;
+}
+
+.addon-content.addon-sm {
+  font-size: 11px;
+}
+
+.addon-content.addon-xs {
+  font-size: 10px;
 }
 
 /* ========== 底部导航栏：[◀ 上一周]  第 XX 周  [下一周 ▶] ========== */

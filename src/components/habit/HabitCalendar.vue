@@ -35,6 +35,9 @@ const emit = defineEmits<{
 /** 打卡圆圈填充色（未选颜色时回退为默认墨色） */
 const circleColor = computed<string>(() => props.color || 'var(--color-text-primary)')
 
+/** 是否默认墨色填充（墨色圆较深，数字用白色；彩色圆较浅，数字用黑色） */
+const isDefaultColor = computed<boolean>(() => !props.color)
+
 /** 周一~周日 表头 */
 const weekHeaders = ['一', '二', '三', '四', '五', '六', '日']
 
@@ -124,7 +127,7 @@ function isCheckedIn(date: string): boolean {
           <span
             v-if="cell.inMonth"
             class="cal-day"
-            :class="{ filled: isCheckedIn(cell.date) }"
+            :class="{ filled: isCheckedIn(cell.date), 'default-color': isDefaultColor }"
           >{{ cell.day }}</span>
         </div>
       </div>
@@ -185,18 +188,24 @@ function isCheckedIn(date: string): boolean {
   background: var(--color-bg-surface);
 }
 
+/* 今天：不用方形格子框，改为日期数字的圆形描边圈 */
 .cal-cell.today {
-  background: #fff;
-  box-shadow: inset 0 0 0 1.5px var(--color-text-primary);
+  background: transparent;
+  box-shadow: none;
+}
+
+.cal-cell.today .cal-day {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1.5px var(--color-text-primary);
 }
 
 .cal-cell.checked {
   background: transparent;
-}
-
-.cal-cell.checked.today {
-  background: #fff;
-  box-shadow: inset 0 0 0 1.5px var(--color-text-primary);
 }
 
 .cal-day {
@@ -206,7 +215,7 @@ function isCheckedIn(date: string): boolean {
   line-height: 1;
 }
 
-/* 打卡日：日期数字带涂色实心圆背景，数字白色仍可见 */
+/* 打卡日：日期数字带涂色实心圆背景（彩色圆用黑色数字，保证可见） */
 .cal-day.filled {
   width: 28px;
   height: 28px;
@@ -215,8 +224,20 @@ function isCheckedIn(date: string): boolean {
   justify-content: center;
   border-radius: var(--radius-full);
   background: v-bind(circleColor);
-  color: #0e0d0d;
+  color: #2E2622;
   font-weight: var(--font-weight-bold);
   box-shadow: 0 1px 3px rgba(78, 63, 55, 0.2);
+}
+
+/* 默认墨色圆较深，数字改用白色保证对比度 */
+.cal-day.filled.default-color {
+  color: #fff;
+}
+
+/* 今天且已打卡：涂色实心圆外再套一圈墨色圆环（无方形框） */
+.cal-cell.today .cal-day.filled {
+  box-shadow:
+    0 0 0 1.5px var(--color-text-primary),
+    0 1px 3px rgba(78, 63, 55, 0.2);
 }
 </style>
