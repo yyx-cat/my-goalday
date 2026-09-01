@@ -1,4 +1,4 @@
-import type { Diary, Mood } from '@/types/diary'
+import type { Diary } from '@/types/diary'
 
 // localStorage 存储的 key
 const STORAGE_KEY = 'my-goalday-diaries'
@@ -43,9 +43,8 @@ export function getDiary(date: string): Diary | null {
  * 保存日记（新增或更新）
  * @param date - 日期字符串
  * @param content - 日记内容
- * @param mood - 心情标签（可选）
  */
-export function saveDiary(date: string, content: string, mood?: Mood): void {
+export function saveDiary(date: string, content: string): void {
   const diaries = getDiaries()
   const existingIndex = diaries.findIndex(d => d.date === date)
 
@@ -54,7 +53,6 @@ export function saveDiary(date: string, content: string, mood?: Mood): void {
     diaries[existingIndex] = {
       ...diaries[existingIndex],
       content,
-      mood,
       updatedAt: new Date().toISOString(),
     }
   } else {
@@ -62,7 +60,6 @@ export function saveDiary(date: string, content: string, mood?: Mood): void {
     diaries.push({
       date,
       content,
-      mood,
       updatedAt: new Date().toISOString(),
     })
   }

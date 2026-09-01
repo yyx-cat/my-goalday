@@ -28,8 +28,3 @@ export const HABIT_COLORS: { value: string; label: string }[] = [
   { value: '#5B8DBE', label: '蓝' },
   { value: '#8B7AB8', label: '紫' },
 ]
-
-/**
- * 心情类型
- */
-export type Mood = 'happy' | 'neutral' | 'sad' | 'excited'

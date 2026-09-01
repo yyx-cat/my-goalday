@@ -81,7 +81,7 @@ export function startOnboarding(): void {
         element: '[data-guide="sub-record"]',
         popover: {
           title: '子界面 2 · 记录',
-          description: '今天的日记：记录当天的心情与随想，这些内容也会自动出现在手账里。',
+          description: '今天的日记：记录当天的随想，这些内容也会自动出现在手账里。',
           side: 'bottom',
           align: 'end',
         },

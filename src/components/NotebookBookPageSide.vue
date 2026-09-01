@@ -25,7 +25,6 @@ import type { NotebookAddon } from '@/types/notebookAddon'
  * @property overviewDays - 总览页 7 天数据
  * @property hasDiary       - 该日是否有日记内容
  * @property diaryContent   - 日记正文（hasDiary 为 true 时有效）
- * @property diaryMood      - 日记心情表情（可选）
  * @property addons         - 该日各模块添加到手账的附加信息（月清单/理财/减重/打卡）
  */
 interface PageSideData {
@@ -51,21 +50,7 @@ interface PageSideData {
   }[]
   hasDiary: boolean
   diaryContent: string
-  diaryMood: string
   addons: NotebookAddon[]
-}
-
-/**
- * 心情表情映射：把 Mood 字符串转成可读表情
- * 没有匹配的返回空字符串（不显示心情标识）
- */
-const MOOD_EMOJI_MAP: Record<string, string> = {
-  happy: '😊',
-  smile: '🙂',
-  calm: '😌',
-  sad: '😢',
-  angry: '😠',
-  tired: '😴',
 }
 
 /**
@@ -119,7 +104,6 @@ function buildDayData(date: string) {
   const diary = diaryStore.diaries.find(item => item.date === date)
   const diaryContent = diary?.content?.trim() ?? ''
   const hasDiary = diaryContent.length > 0
-  const diaryMood = diary?.mood ? (MOOD_EMOJI_MAP[diary.mood] ?? '') : ''
 
   return {
     date,
@@ -132,7 +116,6 @@ function buildDayData(date: string) {
     progress,
     hasDiary,
     diaryContent,
-    diaryMood,
     addons: addonStore.getAddonsByDate(date),
   }
 }
@@ -173,7 +156,6 @@ const sideData = computed<PageSideData | null>(() => {
       overviewDays: [],
       hasDiary: false,
       diaryContent: '',
-      diaryMood: '',
       addons: [],
     }
   }
@@ -211,7 +193,6 @@ const sideData = computed<PageSideData | null>(() => {
         overviewDays,
         hasDiary: false,
         diaryContent: '',
-        diaryMood: '',
         addons: [],
       }
     } else {
@@ -300,8 +281,6 @@ const sideData = computed<PageSideData | null>(() => {
             <span class="day-dot-sep">·</span>
             <span class="day-week-label">{{ sideData.weekdayLabel }}</span>
             <span class="today-tag" v-if="sideData.isToday">今天</span>
-            <!-- 有日记时显示心情表情 -->
-            <span v-if="sideData.hasDiary && sideData.diaryMood" class="diary-mood">{{ sideData.diaryMood }}</span>
           </div>
         </header>
 
@@ -623,13 +602,6 @@ const sideData = computed<PageSideData | null>(() => {
   white-space: pre-wrap;
   word-break: break-word;
   padding-right: 4px;
-}
-
-/* 心情表情 */
-.diary-mood {
-  font-size: 16px;
-  margin-left: 6px;
-  line-height: 1;
 }
 
 /* 任务区在分栏状态下的滚动列表 */

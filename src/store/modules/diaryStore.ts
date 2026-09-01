@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Diary, Mood } from '@/types/diary'
+import type { Diary } from '@/types/diary'
 import {
   getDiaries,
   saveDiary as storageSaveDiary,
@@ -21,9 +21,6 @@ export const useDiaryStore = defineStore('diary', () => {
 
   // 当前编辑中的日记内容（实时编辑，未保存的草稿）
   const draftContent = ref<string>('')
-
-  // 当前编辑中的心情
-  const draftMood = ref<Mood | undefined>(undefined)
 
   // 保存状态提示
   const savedHint = ref<string>('')
@@ -46,7 +43,6 @@ export const useDiaryStore = defineStore('diary', () => {
   function loadDraft(): void {
     const diary = storageGetDiary(currentDate.value)
     draftContent.value = diary?.content || ''
-    draftMood.value = diary?.mood
   }
 
   /**
@@ -97,7 +93,7 @@ export const useDiaryStore = defineStore('diary', () => {
       // 内容为空，删除已有日记
       storageDeleteDiary(currentDate.value)
     } else {
-      storageSaveDiary(currentDate.value, content, draftMood.value)
+      storageSaveDiary(currentDate.value, content)
     }
     diaries.value = getDiaries()
     showSavedHint()
@@ -110,7 +106,6 @@ export const useDiaryStore = defineStore('diary', () => {
     storageDeleteDiary(currentDate.value)
     diaries.value = getDiaries()
     draftContent.value = ''
-    draftMood.value = undefined
     showSavedHint('已删除')
   }
 
@@ -151,7 +146,6 @@ export const useDiaryStore = defineStore('diary', () => {
     diaries,
     currentDate,
     draftContent,
-    draftMood,
     savedHint,
     pendingOpenRecordDate,
     // 计算属性

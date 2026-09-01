@@ -23,11 +23,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 /**
  * 组件事件
- * @event changeMode - 请求切换到索引模式（emit 'index'）
- * @event update:focusDate - 内部翻页后通知父级当前聚焦日期，用于跨模式保持
+ * @event update:focusDate - 内部翻页后通知父级当前聚焦日期，用于日期保持
  */
 interface Emits {
-  (e: 'changeMode', mode: 'index'): void
   (e: 'update:focusDate', date: string): void
 }
 const emit = defineEmits<Emits>()
@@ -448,13 +446,6 @@ function onSinglePageClickDblAware(event: MouseEvent): void {
 }
 
 /**
- * 请求父组件切换到索引模式
- */
-function switchToIndexMode(): void {
-  emit('changeMode', 'index')
-}
-
-/**
  * 空状态按钮：切换到「日程」Tab
  */
 function goScheduleTab(): void {
@@ -614,10 +605,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="book-mode">
-    <!-- 顶部栏：仅保留切换按钮，不显示页码 -->
+    <!-- 顶部栏：仅标题 -->
     <div class="mode-header">
       <div class="page-title">📒 我的手账</div>
-      <button class="mode-switch" @click="switchToIndexMode">切换到索引模式</button>
     </div>
 
     <!-- 空状态：没有任何任务数据 -->
@@ -768,22 +758,6 @@ onBeforeUnmount(() => {
   font-size: 14px;
   color: var(--color-text-secondary);
   letter-spacing: 0.5px;
-}
-
-.mode-switch {
-  border: 1px solid var(--color-text-primary);
-  background: transparent;
-  color: var(--color-text-primary);
-  padding: 4px 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.mode-switch:hover {
-  background: var(--color-text-primary);
-  color: #fff;
 }
 
 /* ========== 空状态 ========== */

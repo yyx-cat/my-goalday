@@ -84,27 +84,6 @@ export interface DayViewData {
 }
 
 /**
- * 手账展示模式
- * - 'index' 索引模式：左页=7 天周计划列表（概览），右页=选中日详情，快速浏览整周
- * - 'book'  书本模式：左页=某一天详情，右页=下一天详情，沉浸式翻页回顾
- */
-export type NotebookMode = 'index' | 'book'
-
-/**
- * 索引模式的数据结构
- * @property weekDays      - 当前周的 7 天日期（周一→周日）
- * @property selectedDate  - 当前选中的日期
- * @property selectedTodos - 当前选中日的任务列表
- * @property weekProgress  - 本周整体完成率（0-100）
- */
-export interface IndexPageData {
-  weekDays: string[]
-  selectedDate: string
-  selectedTodos: Todo[]
-  weekProgress: number
-}
-
-/**
  * 书本模式的数据结构（左右双页，各承载某一天详情）
  * @property leftDate      - 左页日期（YYYY-MM-DD）
  * @property rightDate     - 右页日期（配对奇数个日期时最后一对可能为 null）

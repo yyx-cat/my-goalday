@@ -3,9 +3,7 @@ import { ref, computed, onMounted, watch, inject, provide } from 'vue'
 import { useTodoStore } from '@/store/modules/todoStore'
 import { useDiaryStore } from '@/store/modules/diaryStore'
 import { getTodayDate } from '@/utils/date'
-import NotebookIndexMode from '@/components/NotebookIndexMode.vue'
 import NotebookBookMode from '@/components/NotebookBookMode.vue'
-import type { NotebookMode } from '@/types/notebook'
 
 const todoStore = useTodoStore()
 const diaryStore = useDiaryStore()
@@ -41,60 +39,19 @@ const isNotebookActive = computed<boolean>(() => {
 // ========== 状态 ==========
 
 /**
- * 当前手账展示模式：'index' = 索引模式，'book' = 书本模式
- * 默认用 'index'（给用户快速定位的能力，再按需切到沉浸式书本）
- */
-const currentMode = ref<NotebookMode>('index')
-
-/**
- * 当前聚焦日期（跨模式状态保持）
- * 切换模式时会以此为锚点，跳转到两种模式对应的视图
+ * 当前聚焦日期
+ * 进入手账时以此为锚点，书本模式跳转到包含该日期的页
  */
 const currentFocusDate = ref<string>(getTodayDate())
 
 // ========== 计算属性 ==========
 
 /**
- * 是否有任何任务数据：决定"显示空状态引导"还是"显示对应模式内容"
+ * 是否有任何任务数据：决定"显示空状态引导"还是"显示书本内容"
  */
 const hasAnyData = computed<boolean>(() => {
   return todoStore.todos.length > 0
 })
-
-/**
- * 切换到索引模式，并让索引模式聚焦到指定日期（默认 currentFocusDate）
- * @param fromDate - 希望在索引模式里高亮/展示的日期
- */
-function switchToIndex(fromDate?: string): void {
-  if (fromDate) {
-    currentFocusDate.value = fromDate
-  }
-  currentMode.value = 'index'
-}
-
-/**
- * 切换到书本模式，并让书本模式跳转到包含指定日期的配对（默认 currentFocusDate）
- * 若目标日期没有对应的任务页，书本会回落到最新一页
- * @param fromDate - 希望在书本模式里展示的日期
- */
-function switchToBook(fromDate?: string): void {
-  if (fromDate) {
-    currentFocusDate.value = fromDate
-  }
-  currentMode.value = 'book'
-}
-
-/**
- * 通用模式切换入口（供子组件 changeMode 事件 / 顶部切换按钮共同使用）
- * @param mode - 目标模式
- */
-function switchMode(mode: NotebookMode): void {
-  if (mode === 'index') {
-    switchToIndex()
-  } else {
-    switchToBook()
-  }
-}
 
 /**
  * 处理子组件内部日期变化（update:focusDate）：把最新聚焦日期同步到父级状态
@@ -128,7 +85,7 @@ function jumpToScheduleRecord(date: string): void {
   switchTab('schedule')
 }
 
-// 将跳转方法下发给手账子模式组件（索引模式 / 书本模式）
+// 将跳转方法下发给手账子组件（书本模式）
 provide<(date: string) => void>('jumpToScheduleRecord', jumpToScheduleRecord)
 
 // ========== 生命周期 ==========
@@ -162,30 +119,14 @@ watch(hasAnyData, (nowHas, had) => {
 
 <template>
   <div class="notebook-container">
-    <!-- 顶部：返回按钮 + 模式切换按钮（📋 索引模式 / 📖 书本模式） -->
+    <!-- 顶部：返回按钮（手账页隐藏了全局底部栏，所以需要独立返回入口） -->
     <div class="mode-switcher">
-      <!-- 左侧：返回日程 Tab（手账页隐藏了全局底部栏，所以需要独立返回入口） -->
       <button class="back-btn" @click="goScheduleTab" aria-label="返回日程">
         <span class="back-arrow">◀</span>
         <span class="back-text">返回</span>
       </button>
 
-      <!-- 中间：模式切换 -->
-      <div class="mode-switcher-center">
-        <button
-          class="mode-btn"
-          :class="{ active: currentMode === 'index' }"
-          @click="switchMode('index')"
-        >📋 索引模式</button>
-
-        <button
-          class="mode-btn"
-          :class="{ active: currentMode === 'book' }"
-          @click="switchMode('book')"
-        >📖 书本模式</button>
-      </div>
-
-      <!-- 右侧：占位让中间居中（宽度与返回按钮对称） -->
+      <!-- 右侧占位（与返回按钮同宽，保持返回按钮靠左） -->
       <div class="mode-switcher-placeholder" aria-hidden="true"></div>
     </div>
 
@@ -198,25 +139,13 @@ watch(hasAnyData, (nowHas, had) => {
       </div>
     </div>
 
-    <!-- 有数据：按当前模式条件渲染，同时绑定 focusDate 和 update:focusDate 做跨模式日期保持 -->
-    <template v-else>
-      <!-- 索引模式：左 7 天列表 + 右 选中日详情 -->
-      <NotebookIndexMode
-        v-if="currentMode === 'index'"
-        :focus-date="currentFocusDate"
-        @change-mode="switchMode"
-        @update:focus-date="handleFocusDateUpdate"
-      />
-
-      <!-- 书本模式：左某天 + 右下一天，支持滑动翻页 -->
-      <NotebookBookMode
-        v-else
-        :focus-date="currentFocusDate"
-        data-guide="notebook-pages"
-        @change-mode="switchMode"
-        @update:focus-date="handleFocusDateUpdate"
-      />
-    </template>
+    <!-- 有数据：渲染书本模式，绑定 focusDate 和 update:focusDate 做日期保持 -->
+    <NotebookBookMode
+      v-else
+      :focus-date="currentFocusDate"
+      data-guide="notebook-pages"
+      @update:focus-date="handleFocusDateUpdate"
+    />
   </div>
 </template>
 
@@ -276,47 +205,10 @@ watch(hasAnyData, (nowHas, had) => {
   letter-spacing: 0.5px;
 }
 
-/* 右侧占位（与返回按钮同宽，让中间居中） */
+/* 右侧占位（与返回按钮同宽，保持返回按钮靠左） */
 .mode-switcher-placeholder {
   min-width: 76px;
   flex-shrink: 0;
-}
-
-/* 中间模式切换按钮组 */
-.mode-switcher-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex: 1;
-}
-
-.mode-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  padding: 0 16px;
-  border-radius: 18px;
-  border: 1px solid var(--color-border-divider);
-  background: #fff;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.18s ease;
-  letter-spacing: 0.3px;
-}
-
-.mode-btn:hover {
-  border-color: var(--color-text-primary);
-  color: var(--color-text-primary);
-}
-
-.mode-btn.active {
-  background: var(--color-text-primary);
-  border-color: var(--color-text-primary);
-  color: #fff;
-  box-shadow: 0 3px 10px rgba(26, 26, 26, 0.15);
 }
 
 /* ========== 统一空状态引导卡 ========== */
