@@ -594,7 +594,7 @@ watch(
               点击此处创建任务
             </div>
 
-            <!-- 已有任务时，下方额外提供一个明确的"继续添加"入口，避免用户找不到点击处 -->
+            <!-- 已有任务时，下方额外提供一个入口，避免用户找不到点击处 -->
             <div
               v-if="row.todos.length > 0 && !isEditingDate(row.date)"
               class="continue-add-tip"
@@ -1115,10 +1115,12 @@ watch(
 
 .todo-text {
   flex: 1;
-  font-size: 15px;
+  font-size: 18px;
   color: var(--color-text-primary);
   word-break: break-word;
-  line-height: 1.4;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
 }
 
 /* 抽屉清单：任务文本可点击加入今日代办 */

@@ -567,9 +567,9 @@ const sideData = computed<PageSideData | null>(() => {
 }
 
 .task-text {
-  font-size: 15px;
+  font-size: 17px;
   color: var(--color-text-primary);
-  line-height: 1.4;
+  line-height: 1.25;
   flex: 1;
 }
 

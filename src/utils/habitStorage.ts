@@ -41,13 +41,15 @@ function generateId(): string {
  * 创建新习惯
  * @param name - 习惯名称
  * @param icon - 习惯图标 emoji（可选）
+ * @param color - 打卡圆圈颜色（可选，空则用默认墨色）
  * @returns 新创建的习惯对象
  */
-export function createHabit(name: string, icon?: string): Habit {
+export function createHabit(name: string, icon?: string, color?: string): Habit {
   const newHabit: Habit = {
     id: generateId(),
     name: name.trim(),
     icon: icon || '🎯',
+    color: color || '',
     createdAt: new Date().toISOString(),
     checkIns: [],
   }

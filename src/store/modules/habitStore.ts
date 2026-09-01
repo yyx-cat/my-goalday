@@ -26,11 +26,25 @@ export const useHabitStore = defineStore('habit', () => {
    * 创建新习惯
    * @param name - 习惯名称
    * @param icon - 习惯图标 emoji（可选）
+   * @param color - 打卡圆圈颜色（可选，空则用默认墨色）
    */
-  function createHabit(name: string, icon?: string): void {
+  function createHabit(name: string, icon?: string, color?: string): void {
     if (!name.trim()) return
-    const newHabit = storageCreateHabit(name, icon)
+    const newHabit = storageCreateHabit(name, icon, color)
     habits.value.push(newHabit)
+  }
+
+  /**
+   * 修改习惯的打卡圆圈颜色
+   * 同一习惯的所有打卡日共用此颜色
+   * @param id - 习惯 id
+   * @param color - 新颜色（空字符串表示默认墨色）
+   */
+  function setHabitColor(id: string, color: string): void {
+    const habit = habits.value.find(h => h.id === id)
+    if (!habit) return
+    habit.color = color
+    saveHabits(habits.value)
   }
 
   /**
@@ -136,6 +150,7 @@ export const useHabitStore = defineStore('habit', () => {
     // 方法
     loadHabits,
     createHabit,
+    setHabitColor,
     deleteHabit,
     toggleCheckIn,
     isCheckedIn,

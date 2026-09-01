@@ -23,12 +23,17 @@ const props = defineProps<{
   checkIns: string[]
   /** 今天日期字符串 */
   today: string
+  /** 打卡圆圈颜色（可选，空则用默认墨色） */
+  color?: string
 }>()
 
 const emit = defineEmits<{
   /** 点击日期触发，传入日期字符串 */
   (e: 'toggle-date', date: string): void
 }>()
+
+/** 打卡圆圈填充色（未选颜色时回退为默认墨色） */
+const circleColor = computed<string>(() => props.color || 'var(--color-text-primary)')
 
 /** 周一~周日 表头 */
 const weekHeaders = ['一', '二', '三', '四', '五', '六', '日']
@@ -115,11 +120,12 @@ function isCheckedIn(date: string): boolean {
           }"
           @click="cell.inMonth && emit('toggle-date', cell.date)"
         >
-          <span v-if="cell.inMonth" class="cal-day">{{ cell.day }}</span>
+          <!-- 打卡日：日期数字带涂色实心圆背景（数字仍可见） -->
           <span
-            v-if="cell.inMonth && isCheckedIn(cell.date)"
-            class="cal-dot"
-          ></span>
+            v-if="cell.inMonth"
+            class="cal-day"
+            :class="{ filled: isCheckedIn(cell.date) }"
+          >{{ cell.day }}</span>
         </div>
       </div>
     </div>
@@ -185,11 +191,11 @@ function isCheckedIn(date: string): boolean {
 }
 
 .cal-cell.checked {
-  background: var(--color-bg-surface);
+  background: transparent;
 }
 
 .cal-cell.checked.today {
-  background: var(--color-bg-surface);
+  background: #fff;
   box-shadow: inset 0 0 0 1.5px var(--color-text-primary);
 }
 
@@ -200,14 +206,17 @@ function isCheckedIn(date: string): boolean {
   line-height: 1;
 }
 
-.cal-cell.checked .cal-day {
-  color: var(--color-text-primary);
-}
-
-.cal-dot {
-  width: 5px;
-  height: 5px;
+/* 打卡日：日期数字带涂色实心圆背景，数字白色仍可见 */
+.cal-day.filled {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-full);
-  background: var(--color-text-primary);
+  background: v-bind(circleColor);
+  color: #0e0d0d;
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 1px 3px rgba(78, 63, 55, 0.2);
 }
 </style>

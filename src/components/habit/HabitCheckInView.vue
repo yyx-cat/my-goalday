@@ -2,6 +2,7 @@
 import { ref, computed, nextTick } from 'vue'
 import { useHabitStore } from '@/store/modules/habitStore'
 import { useConfirmStore } from '@/store/modules/confirmStore'
+import { HABIT_COLORS } from '@/types/habit'
 import {
   getTodayDate,
   getMonthKey,
@@ -59,6 +60,9 @@ const newHabitName = ref<string>('')
 /** 新习惯图标输入文本 */
 const newHabitIcon = ref<string>('')
 
+/** 新习惯打卡圆圈颜色（空字符串 = 默认墨色） */
+const newHabitColor = ref<string>('')
+
 /** 名称输入框 DOM 引用 */
 const nameInputRef = ref<HTMLInputElement | null>(null)
 
@@ -115,13 +119,49 @@ function handleCellClick(date: string): void {
 }
 
 /**
+ * 判断某日期是否是未来（还没到的天数）
+ * @param date - 日期字符串
+ * @returns 是否为未来日期
+ */
+function isFutureDate(date: string): boolean {
+  return date > today
+}
+
+/**
  * 确认打卡某习惯的选中日期
- * 若已打卡则取消，未打卡则打卡
+ * - 未来日期：禁止打卡（按钮已禁用，此处兜底返回）
+ * - 过去日期未打卡：弹补卡确认，提醒打卡日期不是今天
+ * - 已打卡（任意日期）：取消打卡需二次确认
  * @param habitId - 习惯 id
  */
-function handleConfirmCheckIn(habitId: string): void {
-  if (!selectedDate.value) return
-  habitStore.toggleCheckIn(habitId, selectedDate.value)
+async function handleConfirmCheckIn(habitId: string): Promise<void> {
+  const date = selectedDate.value
+  if (!date) return
+  const checked = isHabitCheckedIn(habitId, date)
+
+  if (checked) {
+    // 已打卡 → 取消打卡需二次确认
+    const ok = await confirmStore.confirm({
+      title: '取消打卡',
+      message: `确认取消 ${date} 的打卡记录吗？取消后该日将恢复为未打卡状态。`,
+    })
+    if (!ok) return
+    habitStore.toggleCheckIn(habitId, date)
+    return
+  }
+
+  // 未打卡 → 未来日期禁止打卡（兜底保护）
+  if (isFutureDate(date)) return
+
+  // 未打卡 → 过去日期弹补卡确认，提醒不是今天
+  if (date < today) {
+    const ok = await confirmStore.confirm({
+      title: '补卡确认',
+      message: `⚠️ 你选择的日期是 ${date}，不是今天。确认要为这一天补打卡吗？`,
+    })
+    if (!ok) return
+  }
+  habitStore.toggleCheckIn(habitId, date)
 }
 
 /**
@@ -192,10 +232,11 @@ function confirmCreateHabit(): void {
     return
   }
   const icon = newHabitIcon.value.trim() || '🎯'
-  habitStore.createHabit(name, icon)
+  habitStore.createHabit(name, icon, newHabitColor.value)
   creatingHabit.value = false
   newHabitName.value = ''
   newHabitIcon.value = ''
+  newHabitColor.value = ''
 }
 
 /**
@@ -205,6 +246,16 @@ function cancelCreateHabit(): void {
   creatingHabit.value = false
   newHabitName.value = ''
   newHabitIcon.value = ''
+  newHabitColor.value = ''
+}
+
+/**
+ * 修改某习惯的打卡圆圈颜色（即时生效，同一习惯所有打卡日共用）
+ * @param habitId - 习惯 id
+ * @param color - 新颜色（空字符串 = 默认墨色）
+ */
+function handleSetColor(habitId: string, color: string): void {
+  habitStore.setHabitColor(habitId, color)
 }
 
 /**
@@ -279,13 +330,30 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
             >本月</button>
           </div>
 
-          <!-- 月历 -->
+          <!-- 月历（打卡日显示该习惯颜色的实心圆） -->
           <HabitCalendar
             :month-dates="monthDates"
             :check-ins="getMonthCheckIns(habit.id)"
             :today="today"
+            :color="habit.color"
             @toggle-date="handleCellClick"
           />
+
+          <!-- 打卡圆圈颜色选择（改色即时生效，该习惯所有打卡日共用） -->
+          <div class="color-row" @click.stop>
+            <span class="color-row-label">打卡圈颜色</span>
+            <div class="color-picker">
+              <button
+                v-for="c in HABIT_COLORS"
+                :key="c.value"
+                class="color-dot"
+                :class="{ active: (habit.color || '') === c.value }"
+                :style="c.value ? { background: c.value } : { background: 'var(--color-text-primary)' }"
+                :title="c.label"
+                @click.stop="handleSetColor(habit.id, c.value)"
+              ></button>
+            </div>
+          </div>
 
           <!-- 选中日期 + 确认按钮 -->
           <div class="confirm-row">
@@ -295,11 +363,19 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
                 v-if="selectedDate && isHabitCheckedIn(habit.id, selectedDate)"
                 class="checked-tag"
               >已打卡</span>
+              <span
+                v-if="selectedDate && isFutureDate(selectedDate)"
+                class="future-tag"
+              >还没到，不能打卡</span>
+              <span
+                v-else-if="selectedDate && !isHabitCheckedIn(habit.id, selectedDate) && selectedDate < today"
+                class="makeup-tag"
+              >补卡</span>
             </span>
             <button
               class="confirm-btn"
               :class="{ cancel: selectedDate && isHabitCheckedIn(habit.id, selectedDate) }"
-              :disabled="!selectedDate"
+              :disabled="!selectedDate || (isFutureDate(selectedDate) && !isHabitCheckedIn(habit.id, selectedDate))"
               @click="handleConfirmCheckIn(habit.id)"
             >
               {{ selectedDate && isHabitCheckedIn(habit.id, selectedDate) ? '取消打卡' : '确认打卡' }}
@@ -327,6 +403,21 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
           />
           <button class="create-confirm" @click="confirmCreateHabit">确认</button>
           <button class="create-cancel" @click="cancelCreateHabit">取消</button>
+        </div>
+        <!-- 新习惯打卡圆圈颜色选择 -->
+        <div class="color-row create-color-row" @click.stop>
+          <span class="color-row-label">打卡圈颜色</span>
+          <div class="color-picker">
+            <button
+              v-for="c in HABIT_COLORS"
+              :key="c.value"
+              class="color-dot"
+              :class="{ active: newHabitColor === c.value }"
+              :style="c.value ? { background: c.value } : { background: 'var(--color-text-primary)' }"
+              :title="c.label"
+              @click.stop="newHabitColor = c.value"
+            ></button>
+          </div>
         </div>
       </div>
 
@@ -514,6 +605,50 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
   padding-top: 4px;
 }
 
+/* 打卡圈颜色选择行 */
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.create-color-row {
+  padding: 0 14px 12px;
+}
+
+.color-row-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.color-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(78, 63, 55, 0.15);
+  transition: transform 0.15s;
+}
+
+.color-dot:hover {
+  transform: scale(1.15);
+}
+
+.color-dot.active {
+  border-color: var(--color-text-primary);
+  box-shadow: 0 0 0 2px #fff inset;
+}
+
 .selected-text {
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -526,6 +661,24 @@ async function handleDeleteHabit(habitId: string): Promise<void> {
   padding: 1px 8px;
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+/* 未来日期提示标签（禁止打卡） */
+.future-tag {
+  padding: 1px 8px;
+  background: rgba(191, 96, 96, 0.12);
+  color: #BF6060;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+/* 过去日期补卡提示标签 */
+.makeup-tag {
+  padding: 1px 8px;
+  background: rgba(224, 149, 83, 0.15);
+  color: #B87A33;
   border-radius: 8px;
   font-size: 11px;
 }
