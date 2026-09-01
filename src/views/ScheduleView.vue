@@ -235,6 +235,10 @@ function goThisMonth(): void {
 function switchSubTab(tab: SubTab): void {
   commitEditingTask()
   activeSubTab.value = tab
+  // 灵感模块与清单抽屉仅在周代办界面显示，切走时收起抽屉
+  if (tab !== 'week' && drawerOpen.value) {
+    toggleDrawer()
+  }
   // 切换到记录视图时加载今日日记草稿
   if (tab === 'record') {
     diaryStore.goToToday()
@@ -520,15 +524,15 @@ watch(
         <!-- 其他视图显示对应标题 -->
         <span v-else class="week-text">{{ activeSubTab === 'record' ? '今日记录' : activeSubTab === 'list' ? '月度清单' : '习惯' }}</span>
 
-        <!-- 右侧：四个子标签 -->
+        <!-- 右侧：四个子标签（data-guide 供新手引导定位） -->
         <nav class="sub-tabs">
-          <button class="sub-tab" :class="{ active: activeSubTab === 'week' }" @click="switchSubTab('week')">周</button>
+          <button class="sub-tab" data-guide="sub-week" :class="{ active: activeSubTab === 'week' }" @click="switchSubTab('week')">周</button>
           <span class="tab-divider">|</span>
-          <button class="sub-tab" :class="{ active: activeSubTab === 'record' }" @click="switchSubTab('record')">记录</button>
+          <button class="sub-tab" data-guide="sub-record" :class="{ active: activeSubTab === 'record' }" @click="switchSubTab('record')">记录</button>
           <span class="tab-divider">|</span>
-          <button class="sub-tab" :class="{ active: activeSubTab === 'list' }" @click="switchSubTab('list')">清单</button>
+          <button class="sub-tab" data-guide="sub-list" :class="{ active: activeSubTab === 'list' }" @click="switchSubTab('list')">清单</button>
           <span class="tab-divider">|</span>
-          <button class="sub-tab" :class="{ active: activeSubTab === 'habit' }" @click="switchSubTab('habit')">习惯</button>
+          <button class="sub-tab" data-guide="sub-habit" :class="{ active: activeSubTab === 'habit' }" @click="switchSubTab('habit')">习惯</button>
         </nav>
       </div>
 
@@ -808,15 +812,15 @@ watch(
       </div>
     </div>
 
-    <!-- 右下角浮动按钮组：清单抽屉箭头 + 灵感入口 -->
-    <div class="float-btn-group">
-      <!-- 灵感模块入口（💡 圆圈） -->
+    <!-- 右下角浮动按钮组：清单抽屉箭头 + 灵感入口（仅在周代办界面显示） -->
+    <div v-if="activeSubTab === 'week'" class="float-btn-group">
+      <!-- 灵感模块入口 -->
       <button
         class="inspiration-btn"
         @click="inspirationOpen = true"
         aria-label="打开灵感模块"
         title="灵感模块"
-      >💡</button>
+      >✨</button>
       <!-- 清单抽屉折叠箭头 -->
       <button
         class="drawer-toggle"
@@ -859,7 +863,7 @@ watch(
               <button class="drawer-close" @click="toggleDrawer">✕</button>
             </div>
           </div>
-//qiaommid nongyixie nongxi ,hhhh ,fc gaoxinga ,zdshi tai xiaor 
+          
           <!-- 抽屉统计 -->
           <div class="drawer-stats">已完成 {{ monthStats.done }}/{{ monthStats.total }}</div>
 
@@ -1196,60 +1200,6 @@ watch(
 .color-dot.active {
   border-color: var(--color-text-primary);
   transform: scale(1.18);
-}
-
-/* ========== 待办改色按钮与弹出色板（写好之后仍可选色） ========== */
-
-/* 任务行定位基准，供色板弹出层定位 */
-.todo-item {
-  position: relative;
-}
-
-/* 改色按钮：显示当前颜色的小圆点 */
-.color-trigger {
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: var(--radius-full);
-  transition: background 0.15s;
-}
-
-.color-trigger:hover,
-.color-trigger.open {
-  background: rgba(78, 63, 55, 0.08);
-}
-
-/* 当前颜色指示点（未设颜色时为空心墨圈） */
-.color-trigger-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-text-primary);
-  background: transparent;
-  flex-shrink: 0;
-}
-
-/* 行内弹出色板 */
-.todo-color-pop {
-  position: absolute;
-  right: 30px;
-  top: calc(100% - 4px);
-  background: #fff;
-  border: 1px solid var(--color-border-divider);
-  border-radius: 10px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  padding: 6px 9px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  z-index: 30;
 }
 
 .edit-input {

@@ -356,16 +356,14 @@ const sideData = computed<PageSideData | null>(() => {
           </div>
         </template>
 
-        <!-- 各模块添加到手账的附加信息（月清单/理财/减重/打卡摘要） -->
+        <!-- 各模块添加到手账的记录（月清单/理财/减重/打卡，直接以纯文本记录进手账） -->
         <div v-if="sideData.addons.length > 0" class="addon-area">
           <div
             v-for="addon in sideData.addons"
             :key="addon.id"
-            class="addon-block"
-          >
-            <div class="addon-title">{{ addon.title }}</div>
-            <div class="addon-content" :class="addonFontClass(addon.content)">{{ addon.content }}</div>
-          </div>
+            class="addon-content"
+            :class="addonFontClass(addon.content)"
+          >{{ addon.content }}</div>
         </div>
       </div>
     </template>
@@ -692,7 +690,7 @@ const sideData = computed<PageSideData | null>(() => {
   min-width: 60px;
 }
 
-/* ========== 各模块附加信息区（月清单/理财/减重/打卡摘要） ========== */
+/* ========== 各模块添加到手账的记录区（纯文本直接记录，无摘要块） ========== */
 .addon-area {
   flex-shrink: 0;
   display: flex;
@@ -703,20 +701,6 @@ const sideData = computed<PageSideData | null>(() => {
   border-top: 1px dashed rgba(0, 0, 0, 0.1);
   max-height: 40%;
   overflow-y: auto;
-}
-
-.addon-block {
-  background: rgba(234, 223, 217, 0.35);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-
-.addon-title {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  letter-spacing: 0.5px;
-  margin-bottom: 3px;
-  font-weight: 600;
 }
 
 .addon-content {

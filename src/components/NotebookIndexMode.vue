@@ -368,16 +368,14 @@ onMounted(() => {
             <div v-else class="task-empty">这一天还没有任务</div>
           </template>
 
-          <!-- 各模块添加到手账的附加信息（月清单/理财/减重/打卡摘要，与书本模式一致） -->
+          <!-- 各模块添加到手账的记录（月清单/理财/减重/打卡，直接以纯文本记录进手账，与书本模式一致） -->
           <div v-if="selectedAddons.length > 0" class="addon-area">
             <div
               v-for="addon in selectedAddons"
               :key="addon.id"
-              class="addon-block"
-            >
-              <div class="addon-title">{{ addon.title }}</div>
-              <div class="addon-content" :class="addonFontClass(addon.content)">{{ addon.content }}</div>
-            </div>
+              class="addon-content"
+              :class="addonFontClass(addon.content)"
+            >{{ addon.content }}</div>
           </div>
         </section>
       </div>
@@ -785,7 +783,7 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
-/* ========== 各模块附加信息区（月清单/理财/减重/打卡摘要，与书本模式同款） ========== */
+/* ========== 各模块添加到手账的记录区（纯文本直接记录，无摘要块） ========== */
 .addon-area {
   flex-shrink: 0;
   display: flex;
@@ -796,20 +794,6 @@ onMounted(() => {
   border-top: 1px dashed rgba(0, 0, 0, 0.1);
   max-height: 35%;
   overflow-y: auto;
-}
-
-.addon-block {
-  background: rgba(234, 223, 217, 0.35);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-
-.addon-title {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  letter-spacing: 0.5px;
-  margin-bottom: 3px;
-  font-weight: 600;
 }
 
 .addon-content {
