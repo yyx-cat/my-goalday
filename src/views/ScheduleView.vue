@@ -249,6 +249,8 @@ function switchSubTab(tab: SubTab): void {
  * @param date - 日期字符串
  */
 async function startEditDate(date: string): Promise<void> {
+  // 点空白创建新任务时，收起已展开的改色板
+  colorPickerTodoId.value = null
   if (editingTask.value && editingTask.value.key !== date) {
     commitEditingTask()
   }
@@ -347,6 +349,27 @@ function isEditingMonth(): boolean {
 /** 切换待办完成状态 */
 function handleToggleTodo(id: string): void {
   todoStore.toggleTodo(id)
+}
+
+/** 当前展开改色板的待办 id（null 表示全部收起） */
+const colorPickerTodoId = ref<string | null>(null)
+
+/**
+ * 切换某条待办的改色板展开/收起
+ * @param id - 待办 id
+ */
+function toggleTodoColorPicker(id: string): void {
+  colorPickerTodoId.value = colorPickerTodoId.value === id ? null : id
+}
+
+/**
+ * 设置某条待办的圆点颜色（写好之后仍可改色，即时保存）
+ * @param id - 待办 id
+ * @param color - 新颜色（空字符串表示恢复默认墨色）
+ */
+function handleSetTodoColor(id: string, color: string): void {
+  todoStore.updateTodoColor(id, color)
+  colorPickerTodoId.value = null
 }
 
 /**
@@ -559,7 +582,27 @@ watch(
             >
               <button class="todo-dot" :class="{ filled: todo.done }" :style="getTodoDotStyle(todo)" @click="handleToggleTodo(todo.id)"></button>
               <span class="todo-text">{{ todo.text }}</span>
+              <!-- 改色按钮：显示当前颜色小圆点，点击展开色板 -->
+              <button
+                class="color-trigger"
+                :class="{ open: colorPickerTodoId === todo.id }"
+                title="修改颜色"
+                @click.stop="toggleTodoColorPicker(todo.id)"
+              ><span class="color-trigger-dot" :style="todo.color ? { background: todo.color } : {}"></span></button>
               <button class="delete-btn" @click="handleDeleteTodo(todo.id)">✕</button>
+
+              <!-- 行内改色板（写好之后仍可选择颜色） -->
+              <div v-if="colorPickerTodoId === todo.id" class="todo-color-pop" @click.stop>
+                <button
+                  v-for="c in TODO_COLORS"
+                  :key="c.value"
+                  class="color-dot"
+                  :class="{ active: (todo.color || '') === c.value }"
+                  :style="c.value ? { background: c.value } : { background: 'var(--color-text-primary)' }"
+                  :title="c.label"
+                  @click.stop="handleSetTodoColor(todo.id, c.value)"
+                ></button>
+              </div>
             </div>
 
             <!-- 正在创建的新任务 -->
@@ -816,7 +859,7 @@ watch(
               <button class="drawer-close" @click="toggleDrawer">✕</button>
             </div>
           </div>
-
+//qiaommid nongyixie nongxi ,hhhh ,fc gaoxinga ,zdshi tai xiaor 
           <!-- 抽屉统计 -->
           <div class="drawer-stats">已完成 {{ monthStats.done }}/{{ monthStats.total }}</div>
 
@@ -1153,6 +1196,60 @@ watch(
 .color-dot.active {
   border-color: var(--color-text-primary);
   transform: scale(1.18);
+}
+
+/* ========== 待办改色按钮与弹出色板（写好之后仍可选色） ========== */
+
+/* 任务行定位基准，供色板弹出层定位 */
+.todo-item {
+  position: relative;
+}
+
+/* 改色按钮：显示当前颜色的小圆点 */
+.color-trigger {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  transition: background 0.15s;
+}
+
+.color-trigger:hover,
+.color-trigger.open {
+  background: rgba(78, 63, 55, 0.08);
+}
+
+/* 当前颜色指示点（未设颜色时为空心墨圈） */
+.color-trigger-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-text-primary);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+/* 行内弹出色板 */
+.todo-color-pop {
+  position: absolute;
+  right: 30px;
+  top: calc(100% - 4px);
+  background: #fff;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  padding: 6px 9px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 30;
 }
 
 .edit-input {

@@ -135,22 +135,6 @@ const selectedTodos = computed<Todo[]>(() => {
 })
 
 /**
- * 选中日期的完成率（0-100），来源于 todoStore.getDateProgress
- */
-const selectedProgress = computed<number>(() => {
-  return todoStore.getDateProgress(selectedDate.value)
-})
-
-/**
- * 选中日期的完成数 / 总数
- */
-const selectedStats = computed<{ done: number; total: number }>(() => {
-  const total = selectedTodos.value.length
-  const done = selectedTodos.value.filter(t => t.done).length
-  return { done, total }
-})
-
-/**
  * 选中日期的"星期几 / 日号 / 是否今天"信息
  */
 const selectedMeta = computed<{ dayNumber: number; weekday: string; isToday: boolean }>(() => {
@@ -172,15 +156,6 @@ const selectedDiary = computed<{ content: string; moodEmoji: string } | null>(()
   if (content.length === 0) return null
   const moodEmoji = d!.mood ? (MOOD_EMOJI_MAP[d!.mood] ?? '') : ''
   return { content, moodEmoji }
-})
-
-/**
- * 本周整体完成率（7 天完成率的算术平均值，取整 0-100）
- */
-const weekProgress = computed<number>(() => {
-  if (weekDays.value.length === 0) return 0
-  const sum = weekDays.value.reduce((acc, d) => acc + todoStore.getDateProgress(d), 0)
-  return Math.round(sum / weekDays.value.length)
 })
 
 /**
@@ -309,10 +284,6 @@ onMounted(() => {
               <span class="header-split">|</span>
               <span class="header-week">第{{ weekNumber }}周</span>
             </div>
-            <div class="header-week-progress">
-              <span class="week-progress-label">本周完成率</span>
-              <span class="week-progress-value">{{ weekProgress }}%</span>
-            </div>
           </header>
 
           <ul class="day-list">
@@ -331,9 +302,6 @@ onMounted(() => {
               <span class="day-week">{{ getWeekDay(parseDate(date)) }}</span>
               <span class="day-num">{{ parseDate(date).getDate() }}</span>
               <span class="day-dot" v-if="isToday(date)"></span>
-              <span class="day-progress">
-                {{ todoStore.getDateProgress(date) }}%
-              </span>
             </li>
           </ul>
         </section>
@@ -354,10 +322,6 @@ onMounted(() => {
             <span class="today-tag" v-if="selectedMeta.isToday">今天</span>
             <!-- 有日记时显示心情表情 -->
             <span v-if="selectedDiary && selectedDiary.moodEmoji" class="diary-mood">{{ selectedDiary.moodEmoji }}</span>
-
-            <div class="right-progress-pill">
-              已完成 {{ selectedStats.done }}/{{ selectedStats.total }}（{{ selectedProgress }}%）
-            </div>
           </header>
 
           <!-- 有日记：左右分栏（左=日记，右=任务） -->
@@ -373,9 +337,6 @@ onMounted(() => {
 
             <!-- 右半：任务列表 -->
             <div class="tasks-pane">
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: selectedProgress + '%' }"></div>
-              </div>
               <ul class="task-list" v-if="selectedTodos.length > 0">
                 <li
                   v-for="todo in selectedTodos"
@@ -391,12 +352,8 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- 无日记：原样显示进度条 + 任务列表 -->
+          <!-- 无日记：直接显示任务列表 -->
           <template v-else>
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: selectedProgress + '%' }"></div>
-            </div>
-
             <ul class="task-list" v-if="selectedTodos.length > 0">
               <li
                 v-for="todo in selectedTodos"
@@ -438,7 +395,6 @@ onMounted(() => {
 
       <div class="week-center">
         <span class="week-label">第 {{ weekNumber }} 周</span>
-        <span class="week-progress-mini">完成 {{ weekProgress }}%</span>
       </div>
 
       <button
@@ -515,14 +471,14 @@ onMounted(() => {
 
 .book-pages {
   /*
-   * 书本比例与 BookMode 一致：宽高比 1:0.78（桌面）
-   * - 宽度：最多 780px（大桌面），或 88% 视口宽度
+   * 书本比例与 BookMode 一致：宽高比 1:0.85（桌面，比之前更长更高）
+   * - 宽度：最多 840px（大桌面），或 92% 视口宽度
    * - 高度：按宽度比例
    * - 再夹一个上限：剩余可用高度的 100%，避免溢出
    */
-  width: min(88vw, 780px);
-  aspect-ratio: 1 / 0.78;
-  max-height: calc(100vh - 200px);
+  width: min(92vw, 840px);
+  aspect-ratio: 1 / 0.85;
+  max-height: calc(100vh - 180px);
   max-width: 100%;
   display: flex;
   align-items: stretch;
@@ -601,23 +557,6 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
-.header-week-progress {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.week-progress-label {
-  color: var(--color-text-secondary);
-}
-
-.week-progress-value {
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* 左页 7 天列表 */
 .day-list {
   list-style: none;
@@ -660,7 +599,7 @@ onMounted(() => {
 }
 
 .day-num {
-  font-size: 20px;
+  font-size: 16px;
   width: 28px;
   text-align: center;
   color: var(--color-text-primary);
@@ -674,20 +613,13 @@ onMounted(() => {
   background: var(--color-text-primary);
 }
 
-.day-progress {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* 右页 */
 .right-header {
   align-items: center;
 }
 
 .right-day-num {
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
@@ -710,33 +642,6 @@ onMounted(() => {
   padding: 2px 8px;
   border-radius: 10px;
   margin-left: 8px;
-}
-
-.right-progress-pill {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  background: rgba(234, 223, 217, 0.5);
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* 进度条 */
-.progress-bar {
-  width: 100%;
-  height: 6px;
-  background: #F2ECE7;
-  border-radius: 3px;
-  margin-bottom: 14px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #E5C8B6 0%, #C9A58E 100%);
-  transition: width 0.3s ease;
 }
 
 /* ========== 有日记时的上下分栏布局 ========== */
@@ -817,10 +722,6 @@ onMounted(() => {
   flex: 1;
 }
 
-.tasks-pane .progress-bar {
-  margin-bottom: 8px;
-}
-
 /* 分栏状态下的紧凑空状态 */
 .task-empty-small {
   padding: 10px 4px;
@@ -860,7 +761,7 @@ onMounted(() => {
 }
 
 .task-text {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--color-text-primary);
   line-height: 1.4;
   flex: 1;
@@ -988,12 +889,6 @@ onMounted(() => {
   letter-spacing: 1px;
 }
 
-.week-progress-mini {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* ========== 移动端适配 ========== */
 @media (max-width: 640px) {
   .mode-header {
@@ -1005,10 +900,10 @@ onMounted(() => {
   }
 
   .book-pages {
-    /* 手机端：更紧凑的书本比例，留白明显，像一本书 */
-    width: min(92vw, 780px);
-    aspect-ratio: 1 / 0.9;
-    max-height: calc(100vh - 210px);
+    /* 手机端：更紧凑的书本比例，留白明显，像一本书（比之前更长一点） */
+    width: min(94vw, 840px);
+    aspect-ratio: 1 / 0.95;
+    max-height: calc(100vh - 190px);
     margin: 0 auto;
     box-shadow: 0 12px 28px rgba(78, 63, 55, 0.18);
     border-radius: 4px;
@@ -1029,12 +924,12 @@ onMounted(() => {
   }
 
   .day-num {
-    font-size: 18px;
+    font-size: 15px;
     width: 24px;
   }
 
   .right-day-num {
-    font-size: 20px;
+    font-size: 16px;
   }
 }
 </style>

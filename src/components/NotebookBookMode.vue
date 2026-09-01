@@ -657,14 +657,14 @@ onBeforeUnmount(() => {
 
 .book-pages {
   /*
-   * 书本比例设计（接近一本翻开的 32 开笔记本，宽:高 ≈ 1:0.85）
-   * - 宽度：最多 780px（大桌面），或 88% 视口宽度
-   * - 高度：按宽度的 0.78 比例（保证书本看起来像书，而非拉满的长条形）
+   * 书本比例设计（接近一本翻开的笔记本，宽:高 ≈ 1:0.85，比之前更长更高）
+   * - 宽度：最多 840px（大桌面），或 92% 视口宽度
+   * - 高度：按宽度的 0.85 比例（保证书本看起来像书，同时更长一点）
    * - 再夹一个上限：剩余可用高度的 100%，避免溢出
    */
-  width: min(88vw, 780px);
-  aspect-ratio: 1 / 0.78;
-  max-height: calc(100vh - 200px);
+  width: min(92vw, 840px);
+  aspect-ratio: 1 / 0.85;
+  max-height: calc(100vh - 180px);
   max-width: 100%;
   display: flex;
   align-items: stretch;
@@ -879,11 +879,11 @@ onBeforeUnmount(() => {
   }
 
   .book-pages {
-    /* 手机端：宽占比再小一点，呈现"一本书"的感觉（周围留白明显） */
-    width: min(92vw, 780px);
-    /* 书本宽高比 1:0.9 — 手机屏幕较长，略微拉高避免太扁 */
-    aspect-ratio: 1 / 0.9;
-    max-height: calc(100vh - 210px);
+    /* 手机端：宽占比再小一点，呈现"一本书"的感觉（周围留白明显），比之前更长一点 */
+    width: min(94vw, 840px);
+    /* 书本宽高比 1:0.95 — 手机屏幕较长，略微拉高避免太扁 */
+    aspect-ratio: 1 / 0.95;
+    max-height: calc(100vh - 190px);
     /* 让书本与顶栏、底栏保持距离，看起来是独立的"书" */
     margin: 0 auto;
     box-shadow: 0 12px 28px rgba(78, 63, 55, 0.18);

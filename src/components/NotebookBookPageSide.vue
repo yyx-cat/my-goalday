@@ -274,14 +274,7 @@ const sideData = computed<PageSideData | null>(() => {
             <span class="day-dot-sep">·</span>
             <span class="day-week-label">本周总计划</span>
           </div>
-          <div class="day-progress-text">
-            完成 {{ sideData.overviewProgress }}%
-          </div>
         </header>
-
-        <div class="day-progress-bar">
-          <div class="progress-fill" :style="{ width: sideData.overviewProgress + '%' }"></div>
-        </div>
 
         <ul class="week-overview-list">
           <li
@@ -292,10 +285,6 @@ const sideData = computed<PageSideData | null>(() => {
           >
             <span class="wo-weekday">{{ d.weekdayLabel }}</span>
             <span class="wo-daynum">{{ d.monthDayLabel }}</span>
-            <span class="wo-progress">{{ d.doneCount }}/{{ d.totalCount }}</span>
-            <span class="wo-bar">
-              <span class="wo-bar-fill" :style="{ width: d.progress + '%' }"></span>
-            </span>
           </li>
         </ul>
       </div>
@@ -304,7 +293,7 @@ const sideData = computed<PageSideData | null>(() => {
     <!-- ========== 单日详情（工作日对 或 总览右页的周一） ========== -->
     <template v-else>
       <div class="page-inner" :class="{ 'has-diary': sideData.hasDiary }">
-        <!-- 顶部头部：日期 + 进度（有日记时也保留，让用户一眼知道是哪天） -->
+        <!-- 顶部头部：日期（有日记时也保留，让用户一眼知道是哪天） -->
         <header class="day-header">
           <div class="day-title-line">
             <span class="day-date-label">{{ sideData.monthDayLabel }}</span>
@@ -313,9 +302,6 @@ const sideData = computed<PageSideData | null>(() => {
             <span class="today-tag" v-if="sideData.isToday">今天</span>
             <!-- 有日记时显示心情表情 -->
             <span v-if="sideData.hasDiary && sideData.diaryMood" class="diary-mood">{{ sideData.diaryMood }}</span>
-          </div>
-          <div class="day-progress-text">
-            进度 {{ sideData.doneCount }}/{{ sideData.totalCount }}  {{ sideData.progress }}%
           </div>
         </header>
 
@@ -332,9 +318,6 @@ const sideData = computed<PageSideData | null>(() => {
 
           <!-- 右半：任务列表 -->
           <div class="tasks-pane">
-            <div class="day-progress-bar">
-              <div class="progress-fill" :style="{ width: sideData.progress + '%' }"></div>
-            </div>
             <ul class="day-tasks" v-if="sideData.todos.length > 0">
               <li
                 v-for="todo in sideData.todos"
@@ -353,12 +336,8 @@ const sideData = computed<PageSideData | null>(() => {
           </div>
         </div>
 
-        <!-- 无日记：原样显示进度条 + 任务列表 -->
+        <!-- 无日记：直接显示任务列表 -->
         <template v-else>
-          <div class="day-progress-bar">
-            <div class="progress-fill" :style="{ width: sideData.progress + '%' }"></div>
-          </div>
-
           <ul class="day-tasks" v-if="sideData.todos.length > 0">
             <li
               v-for="todo in sideData.todos"
@@ -485,7 +464,7 @@ const sideData = computed<PageSideData | null>(() => {
 }
 
 .day-date-label {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--color-text-primary);
   font-family: var(--font-family-sans);
@@ -507,31 +486,6 @@ const sideData = computed<PageSideData | null>(() => {
   padding: 2px 8px;
   border-radius: 10px;
   margin-left: 6px;
-}
-
-.day-progress-text {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  background: rgba(234, 223, 217, 0.5);
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.day-progress-bar {
-  width: 100%;
-  height: 6px;
-  background: #F2ECE7;
-  border-radius: 3px;
-  margin-bottom: 14px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #E5C8B6 0%, #C9A58E 100%);
-  transition: width 0.3s ease;
 }
 
 .day-tasks {
@@ -567,7 +521,7 @@ const sideData = computed<PageSideData | null>(() => {
 }
 
 .task-text {
-  font-size: 17px;
+  font-size: 14px;
   color: var(--color-text-primary);
   line-height: 1.25;
   flex: 1;
@@ -685,10 +639,6 @@ const sideData = computed<PageSideData | null>(() => {
   flex: 1;
 }
 
-.tasks-pane .day-progress-bar {
-  margin-bottom: 8px;
-}
-
 .day-empty-icon {
   font-size: 22px;
   margin-bottom: 4px;
@@ -740,29 +690,6 @@ const sideData = computed<PageSideData | null>(() => {
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
   min-width: 60px;
-}
-
-.wo-progress {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-  min-width: 36px;
-  text-align: right;
-}
-
-.wo-bar {
-  flex: 1;
-  height: 4px;
-  background: #F2ECE7;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.wo-bar-fill {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #E5C8B6 0%, #C9A58E 100%);
-  transition: width 0.3s ease;
 }
 
 /* ========== 各模块附加信息区（月清单/理财/减重/打卡摘要） ========== */
@@ -821,7 +748,7 @@ const sideData = computed<PageSideData | null>(() => {
   }
 
   .day-date-label {
-    font-size: 18px;
+    font-size: 14px;
   }
 
   .cover-title {

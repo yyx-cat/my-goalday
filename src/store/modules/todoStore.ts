@@ -59,6 +59,18 @@ export const useTodoStore = defineStore('todo', () => {
   }
 
   /**
+   * 修改待办的圆点颜色（任务写好之后仍可改色）
+   * @param id - 待办事项 id
+   * @param color - 新颜色（空字符串表示恢复默认墨色）
+   */
+  function updateTodoColor(id: string, color: string): void {
+    const todo = todos.value.find(t => t.id === id)
+    if (!todo) return
+    todo.color = color || undefined
+    saveTodos(todos.value)
+  }
+  
+  /**
    * 删除待办事项
    * @param id - 待办事项 id
    */
@@ -431,6 +443,7 @@ export const useTodoStore = defineStore('todo', () => {
     loadTodos,
     addTodo,
     toggleTodo,
+    updateTodoColor,
     deleteTodo,
     // 方法（支持任意日期）
     getTodosByDate,
