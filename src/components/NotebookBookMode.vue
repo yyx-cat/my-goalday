@@ -63,10 +63,40 @@ function emitFocusDate(date: string): void {
 // ========== 状态 ==========
 
 /**
- * 当前展示的是第几页（0-based）
+ * 当前展示的是第几页（0-based，桌面端为双页对 index）
  * 第 0 页是整本书的封面页，之后每周 4 张内容页
  */
 const currentIndex = ref<number>(0)
+
+/**
+ * 是否手机端（≤640px）：手机端书本只显示一面，桌面端显示左右两面
+ */
+const isMobile = ref<boolean>(window.innerWidth <= 640)
+
+/**
+ * 手机端单页翻页 index（0-based，摊平后的单页序列 index）
+ */
+const singleIndex = ref<number>(0)
+
+/**
+ * 单页包装结构：某个双页对 + 显示哪一面
+ */
+interface SinglePage {
+  page: BookPage
+  side: 'left' | 'right'
+}
+
+/**
+ * 手机端摊平后的单页序列：每个双页对拆成左、右两张单页，依次翻阅
+ */
+const flatPages = computed<SinglePage[]>(() => {
+  const list: SinglePage[] = []
+  for (const p of bookPages.value) {
+    list.push({ page: p, side: 'left' })
+    list.push({ page: p, side: 'right' })
+  }
+  return list
+})
 
 /**
  * 所有书本双页列表（来源于 todoStore.getBookPages，正序：旧→新）
@@ -105,35 +135,80 @@ const flipDirection = ref<'next' | 'prev' | null>(null)
 const flipFlipped = ref<boolean>(false)
 
 /**
- * 翻动层正面所用的页对象（动画期间有效）
+ * 翻动层正面所用的单页（动画期间有效）
  * - 下一页动画时：正面 = 当前页
  * - 上一页动画时：正面 = 上一页（动画结束时显示在右页位置）
  */
-const flipFrontPage = ref<BookPage | null>(null)
+const flipFront = ref<SinglePage | null>(null)
 
 /**
- * 翻动层反面所用的页对象（动画期间有效）
+ * 翻动层反面所用的单页（动画期间有效）
  * - 下一页动画时：反面 = 下一页
  * - 上一页动画时：反面 = 当前页（动画开始时显示在左页位置）
  */
-const flipBackPage = ref<BookPage | null>(null)
+const flipBack = ref<SinglePage | null>(null)
 
 // ========== 核心方法 ==========
 
 /**
- * 是否有下一页
+ * 是否有下一页（桌面按双页对判断，手机按单页判断）
  * @returns true = 可以翻到下一页
  */
 function hasNext(): boolean {
+  if (isMobile.value) {
+    return singleIndex.value < flatPages.value.length - 1
+  }
   return currentIndex.value < bookPages.value.length - 1
 }
 
 /**
- * 是否有上一页
+ * 是否有上一页（桌面按双页对判断，手机按单页判断）
  * @returns true = 可以翻到上一页
  */
 function hasPrev(): boolean {
+  if (isMobile.value) {
+    return singleIndex.value > 0
+  }
   return currentIndex.value > 0
+}
+
+/**
+ * 获取手机端单页对应的日期（用于双击跳转与聚焦日期同步）
+ * - cover 页：用 weekStart
+ * - 左页：用 leftDate（week-overview 左页无日期，回落 weekStart）
+ * - 右页：用 rightDate（week-overview 右页 = 周一）
+ * @param sp - 单页包装
+ * @returns 日期字符串，无法提取时返回空字符串
+ */
+function getDateOfSingle(sp: SinglePage | null | undefined): string {
+  if (!sp) return ''
+  const p = sp.page
+  if (p.type === 'cover') return p.weekStart
+  if (sp.side === 'left') return p.leftDate ?? p.weekStart
+  return p.rightDate ?? p.weekStart
+}
+
+/**
+ * 桌面/手机通用的"设置当前页"：双页对 index → 各端对应的 index 状态
+ * @param pairIdx - 双页对 index（bookPages 的 index）
+ */
+function setPairIndex(pairIdx: number): void {
+  if (isMobile.value) {
+    singleIndex.value = pairIdx * 2
+  } else {
+    currentIndex.value = pairIdx
+  }
+}
+
+/**
+ * 获取当前展示页对应的聚焦日期（桌面/手机通用）
+ * @returns 聚焦日期字符串，无法提取时返回空字符串
+ */
+function getCurrentFocusDate(): string {
+  if (isMobile.value) {
+    return getDateOfSingle(flatPages.value[singleIndex.value])
+  }
+  return getFocusDateOfPage(bookPages.value[currentIndex.value])
 }
 
 /**
@@ -170,18 +245,24 @@ function getFocusDateOfPage(page: BookPage | undefined): string {
 }
 
 /**
- * 翻到下一页：右页绕书脊向左翻（rotateY 0 → -180deg）
- * 翻动层正面=当前右页，反面=下一页的左页；翻完后 currentIndex 前进一位
+ * 翻到下一页（桌面：右页绕书脊向左翻；手机：整页绕左缘向左翻）
+ * 翻动层正面=当前页，反面=下一页；翻完后 index 前进一位
  */
-function goNextPair(): void {
+function goNextPage(): void {
   if (isAnimating.value) return
   if (!hasNext()) return
   isAnimating.value = true
   flipDirection.value = 'next'
 
-  // 准备翻动层内容
-  flipFrontPage.value = bookPages.value[currentIndex.value]      // 当前页（正面=右页内容）
-  flipBackPage.value = bookPages.value[currentIndex.value + 1]    // 下一页（反面=左页内容）
+  if (isMobile.value) {
+    // 手机单页：正面 = 当前单页，反面 = 下一单页
+    flipFront.value = flatPages.value[singleIndex.value]
+    flipBack.value = flatPages.value[singleIndex.value + 1]
+  } else {
+    // 桌面双页：正面 = 当前右页，反面 = 下一对的左页
+    flipFront.value = { page: bookPages.value[currentIndex.value], side: 'right' }
+    flipBack.value = { page: bookPages.value[currentIndex.value + 1], side: 'left' }
+  }
   flipFlipped.value = false  // 初始 rotateY(0)
 
   // 下一帧再启动动画，确保 initial state 已渲染
@@ -191,34 +272,44 @@ function goNextPair(): void {
     })
   })
 
-  // 动画结束后切换 currentIndex
+  // 动画结束后切换 index
   window.setTimeout(() => {
-    currentIndex.value += 1
-    visualIndex.value = currentIndex.value
+    if (isMobile.value) {
+      singleIndex.value += 1
+    } else {
+      currentIndex.value += 1
+      visualIndex.value = currentIndex.value
+    }
     isAnimating.value = false
     flipDirection.value = null
     flipFlipped.value = false
-    flipFrontPage.value = null
-    flipBackPage.value = null
+    flipFront.value = null
+    flipBack.value = null
 
-    const focusD = getFocusDateOfPage(bookPages.value[currentIndex.value])
+    const focusD = getCurrentFocusDate()
     if (focusD) emitFocusDate(focusD)
   }, 420)
 }
 
 /**
- * 翻到上一页：翻动层从 rotateY(-180deg) 回到 rotateY(0)
- * 翻动层正面=上一页（动画结束时显示在右页位置），反面=当前页（动画开始时显示在左页位置）
+ * 翻到上一页（桌面/手机通用逻辑）：翻动层从 rotateY(-180deg) 回到 rotateY(0)
+ * 翻动层正面=上一页，反面=当前页
  */
-function goPrevPair(): void {
+function goPrevPage(): void {
   if (isAnimating.value) return
   if (!hasPrev()) return
   isAnimating.value = true
   flipDirection.value = 'prev'
 
-  // 准备翻动层内容
-  flipFrontPage.value = bookPages.value[currentIndex.value - 1]  // 上一页（正面）
-  flipBackPage.value = bookPages.value[currentIndex.value]        // 当前页（反面）
+  if (isMobile.value) {
+    // 手机单页：正面 = 上一单页，反面 = 当前单页
+    flipFront.value = flatPages.value[singleIndex.value - 1]
+    flipBack.value = flatPages.value[singleIndex.value]
+  } else {
+    // 桌面双页：正面 = 上一对的右页，反面 = 当前左页
+    flipFront.value = { page: bookPages.value[currentIndex.value - 1], side: 'right' }
+    flipBack.value = { page: bookPages.value[currentIndex.value], side: 'left' }
+  }
   flipFlipped.value = true   // 初始 rotateY(-180deg)（已翻到左页那边）
 
   // 用 nextTick 等待 DOM 应用初始 transform 后，再启动过渡
@@ -229,15 +320,19 @@ function goPrevPair(): void {
   })
 
   window.setTimeout(() => {
-    currentIndex.value -= 1
-    visualIndex.value = currentIndex.value
+    if (isMobile.value) {
+      singleIndex.value -= 1
+    } else {
+      currentIndex.value -= 1
+      visualIndex.value = currentIndex.value
+    }
     isAnimating.value = false
     flipDirection.value = null
     flipFlipped.value = false
-    flipFrontPage.value = null
-    flipBackPage.value = null
+    flipFront.value = null
+    flipBack.value = null
 
-    const focusD = getFocusDateOfPage(bookPages.value[currentIndex.value])
+    const focusD = getCurrentFocusDate()
     if (focusD) emitFocusDate(focusD)
   }, 420)
 }
@@ -275,7 +370,7 @@ function onLeftPageClickDblAware(event: MouseEvent): void {
     pendingClickTimer = null
     // 用闭包里保存的 rect 判断点击位置，不依赖 event.currentTarget
     if (rect && clickX < rect.width / 2) {
-      goPrevPair()
+      goPrevPage()
     }
   }, DBL_CLICK_DELAY)
 }
@@ -304,7 +399,7 @@ function onRightPageClickDblAware(event: MouseEvent): void {
     pendingClickTimer = null
     // 用闭包里保存的 rect 判断点击位置，不依赖 event.currentTarget
     if (rect && clickX >= rect.width / 2) {
-      goNextPair()
+      goNextPage()
     }
   }, DBL_CLICK_DELAY)
 }
@@ -315,10 +410,41 @@ function onRightPageClickDblAware(event: MouseEvent): void {
  */
 function onKeyDown(event: KeyboardEvent): void {
   if (event.key === 'ArrowLeft') {
-    goPrevPair()
+    goPrevPage()
   } else if (event.key === 'ArrowRight') {
-    goNextPair()
+    goNextPage()
   }
+}
+
+/**
+ * 手机端单页点击（带双击感知）：单击延迟翻页，双击则跳转到当前单页日期记录
+ * 点击左半侧 → 翻上一页；点击右半侧 → 翻下一页
+ * @param event - 原生点击事件
+ */
+function onSinglePageClickDblAware(event: MouseEvent): void {
+  if (isAnimating.value) return
+  // 同步阶段立即记录点击位置（setTimeout 回调里 currentTarget 已是 null）
+  const el = event.currentTarget as HTMLElement | null
+  const rect = el?.getBoundingClientRect() ?? null
+  const clickX = rect ? event.clientX - rect.left : 0
+  if (pendingClickTimer) {
+    // 第二次点击 → 双击命中
+    clearTimeout(pendingClickTimer)
+    pendingClickTimer = null
+    const date = getDateOfSingle(flatPages.value[singleIndex.value])
+    if (date) jumpToScheduleRecord(date)
+    return
+  }
+  // 第一次点击 → 延迟执行翻页，给双击留窗口
+  pendingClickTimer = setTimeout(() => {
+    pendingClickTimer = null
+    if (!rect) return
+    if (clickX < rect.width / 2) {
+      goPrevPage()
+    } else {
+      goNextPage()
+    }
+  }, DBL_CLICK_DELAY)
 }
 
 /**
@@ -343,10 +469,13 @@ function goScheduleTab(): void {
 function jumpToToday(): void {
   const today = getTodayDate()
   const idx = findPageIndexByDate(today)
-  if (idx < 0 || idx === currentIndex.value) return
-  currentIndex.value = idx
-  visualIndex.value = idx
-  const focusD = getFocusDateOfPage(bookPages.value[idx])
+  if (idx < 0) return
+  if (!isMobile.value && idx === currentIndex.value) return
+  if (isMobile.value && idx * 2 === singleIndex.value) return
+  setPairIndex(idx)
+  const focusD = isMobile.value
+    ? getDateOfSingle(flatPages.value[singleIndex.value])
+    : getFocusDateOfPage(bookPages.value[idx])
   if (focusD) emitFocusDate(focusD)
 }
 
@@ -354,24 +483,59 @@ function jumpToToday(): void {
  * 快速跳转到整本书的封面页（第 0 页）
  */
 function jumpToCover(): void {
-  if (currentIndex.value === 0) return
-  currentIndex.value = 0
-  visualIndex.value = 0
-  const focusD = getFocusDateOfPage(bookPages.value[0])
+  if (!isMobile.value && currentIndex.value === 0) return
+  if (isMobile.value && singleIndex.value === 0) return
+  setPairIndex(0)
+  const focusD = isMobile.value
+    ? getDateOfSingle(flatPages.value[0])
+    : getFocusDateOfPage(bookPages.value[0])
   if (focusD) emitFocusDate(focusD)
 }
 
 // ========== 当前视觉页数据 ==========
 
 /**
- * 当前视觉展示的双页对象
+ * 当前视觉展示的双页对象（桌面端用）
  */
 const visualPage = computed<BookPage | null>(() => {
   if (visualIndex.value < 0 || visualIndex.value >= bookPages.value.length) return null
   return bookPages.value[visualIndex.value]
 })
 
+/**
+ * 手机端当前视觉展示的单页（摊平序列中的当前项）
+ */
+const visualSingle = computed<SinglePage | null>(() => {
+  if (singleIndex.value < 0 || singleIndex.value >= flatPages.value.length) return null
+  return flatPages.value[singleIndex.value]
+})
+
+/**
+ * 底部栏页标识：桌面/手机通用（取当前双页对的周信息）
+ */
+const currentPageHint = computed<string>(() => {
+  const p = isMobile.value ? visualSingle.value?.page : visualPage.value
+  if (!p) return ''
+  return p.type === 'cover' ? '封面' : `第 ${p.weekNumber} 周`
+})
+
 // ========== 生命周期 ==========
+
+/**
+ * 视口尺寸变化：更新手机/桌面判定（阈值 640px 与样式断点一致）
+ */
+function onResize(): void {
+  const mobile = window.innerWidth <= 640
+  if (mobile === isMobile.value) return
+  isMobile.value = mobile
+  // 切换端时同步 index：单页 index ↔ 双页对 index（取整到该对的左页）
+  if (mobile) {
+    singleIndex.value = currentIndex.value * 2
+  } else {
+    currentIndex.value = Math.floor(singleIndex.value / 2)
+    visualIndex.value = currentIndex.value
+  }
+}
 
 /**
  * 响应父级外部传入的 focusDate：跳转到包含该日期的页
@@ -383,9 +547,14 @@ watch(
     if (!newDate) return
     const idx = findPageIndexByDate(newDate)
     if (idx < 0) return
-    if (idx === currentIndex.value) return
-    currentIndex.value = idx
-    visualIndex.value = idx
+    if (isMobile.value) {
+      if (idx * 2 === singleIndex.value) return
+      singleIndex.value = idx * 2
+    } else {
+      if (idx === currentIndex.value) return
+      currentIndex.value = idx
+      visualIndex.value = idx
+    }
   },
   { immediate: false },
 )
@@ -418,6 +587,8 @@ onMounted(() => {
   }
   currentIndex.value = initIndex
   visualIndex.value = initIndex
+  // 手机端同步单页 index（= 双页对 index * 2，从该对左页开始）
+  singleIndex.value = initIndex * 2
 
   const focusD = getFocusDateOfPage(bookPages.value[initIndex])
   if (focusD) {
@@ -427,10 +598,12 @@ onMounted(() => {
   }
 
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('resize', onResize)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', onResize)
   // 清理双击检测的待执行计时器，避免组件卸载后仍触发翻页
   if (pendingClickTimer) {
     clearTimeout(pendingClickTimer)
@@ -456,10 +629,11 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- 正常：双页书本（3D 翻页） -->
+    <!-- 正常：桌面双页书本（3D 翻页）/ 手机单页 -->
     <template v-else>
       <div class="book-wrapper">
-        <div class="book-pages">
+        <!-- 桌面端：左右双页 -->
+        <div v-if="!isMobile" class="book-pages">
           <!-- 左页：静态展示当前 visualPage 的左页 -->
           <section
             class="paper left-page"
@@ -487,17 +661,45 @@ onBeforeUnmount(() => {
 
             <!-- 3D 翻动层：仅在动画期间显示 -->
             <div
-              v-if="isAnimating && flipFrontPage && flipBackPage"
+              v-if="isAnimating && flipFront && flipBack"
               class="flip-layer"
               :class="{ flipped: flipFlipped }"
             >
               <!-- 正面：绕书脊旋转前半段可见 -->
               <div class="flip-side flip-front">
-                <NotebookBookPageSide :page="flipFrontPage" side="right" />
+                <NotebookBookPageSide :page="flipFront.page" :side="flipFront.side" />
               </div>
               <!-- 反面：绕书脊旋转后半段可见 -->
               <div class="flip-side flip-back">
-                <NotebookBookPageSide :page="flipBackPage" side="left" />
+                <NotebookBookPageSide :page="flipBack.page" :side="flipBack.side" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 手机端：单页（一次只显示一面，整页绕左缘翻转） -->
+        <div v-else class="book-pages single">
+          <div class="single-page-area">
+            <section
+              v-if="visualSingle"
+              class="paper single-page"
+              @click="onSinglePageClickDblAware"
+              title="双击跳转到该日记录"
+            >
+              <NotebookBookPageSide :page="visualSingle.page" :side="visualSingle.side" />
+            </section>
+
+            <!-- 单页 3D 翻动层：仅在动画期间显示 -->
+            <div
+              v-if="isAnimating && flipFront && flipBack"
+              class="flip-layer single-flip-layer"
+              :class="{ flipped: flipFlipped }"
+            >
+              <div class="flip-side flip-front">
+                <NotebookBookPageSide :page="flipFront.page" :side="flipFront.side" />
+              </div>
+              <div class="flip-side flip-back">
+                <NotebookBookPageSide :page="flipBack.page" :side="flipBack.side" />
               </div>
             </div>
           </div>
@@ -508,7 +710,7 @@ onBeforeUnmount(() => {
       <nav class="book-bottom-bar">
         <button
           class="book-nav-btn cover-btn"
-          :disabled="currentIndex === 0 || isAnimating"
+          :disabled="(isMobile ? singleIndex === 0 : currentIndex === 0) || isAnimating"
           @click="jumpToCover"
           title="跳到封面"
         >📒 封面</button>
@@ -516,12 +718,10 @@ onBeforeUnmount(() => {
         <button
           class="book-nav-btn prev"
           :disabled="!hasPrev() || isAnimating"
-          @click="goPrevPair"
+          @click="goPrevPage"
         >◀ 上一页</button>
 
-        <div class="book-page-hint">
-          {{ visualPage?.type === 'cover' ? '封面' : `第 ${visualPage?.weekNumber} 周` }}
-        </div>
+        <div class="book-page-hint">{{ currentPageHint }}</div>
 
         <button
           class="book-nav-btn today-btn"
@@ -533,7 +733,7 @@ onBeforeUnmount(() => {
         <button
           class="book-nav-btn next"
           :disabled="!hasNext() || isAnimating"
-          @click="goNextPair"
+          @click="goNextPage"
         >下一页 ▶</button>
       </nav>
     </template>
@@ -906,5 +1106,36 @@ onBeforeUnmount(() => {
   .empty-state {
     padding: 0 16px 80px;
   }
+}
+
+/* ========== 手机端单页布局（≤640px 由 JS isMobile 驱动渲染分支） ========== */
+.book-pages.single {
+  /* 单页比例：接近一本 A5 笔记本（宽:高 ≈ 3:4），比双页更高更修长 */
+  width: min(88vw, 520px);
+  aspect-ratio: 3 / 4;
+  max-height: calc(100vh - 190px);
+  display: block;
+  margin: 0 auto;
+  box-shadow: 0 12px 28px rgba(78, 63, 55, 0.18);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* 单页容器：给翻动层提供 3D 透视与定位基准 */
+.single-page-area {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  perspective: 1500px;
+}
+
+/* 单页纸张：撑满容器，整页可点击翻页 */
+.single-page {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
 }
 </style>
