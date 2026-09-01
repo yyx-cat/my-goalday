@@ -5,6 +5,7 @@
  * @property done - 是否已完成
  * @property month - 所属月份键 'YYYY-MM'
  * @property createdAt - 创建时间戳
+ * @property source - 来源标识（灵感模块名，用户自建任务为空）
  */
 export interface MonthlyTask {
   id: string
@@ -12,4 +13,5 @@ export interface MonthlyTask {
   done: boolean
   month: string
   createdAt: number
+  source?: string
 }

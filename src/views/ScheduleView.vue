@@ -169,6 +169,68 @@ const dayRows = computed<DayRow[]>(() => {
 /** 清单视图：当前月任务列表 */
 const monthTasks = computed(() => monthlyTaskStore.monthTasks)
 
+/**
+ * 任务分组结构（按来源分组显示）
+ * @property source - 来源标识（空字符串 = 用户自建）
+ * @property label - 分组显示名
+ * @property tasks - 该组任务列表
+ */
+interface TaskGroup {
+  source: string
+  label: string
+  tasks: MonthlyTask[]
+}
+
+/**
+ * 当前月任务按来源分组：用户自建（"我的代办"）置顶，其余按首次出现顺序排列
+ */
+const groupedMonthTasks = computed<TaskGroup[]>(() => {
+  const tasks = monthTasks.value
+  const groupMap = new Map<string, MonthlyTask[]>()
+  for (const t of tasks) {
+    const key = t.source || ''
+    if (!groupMap.has(key)) groupMap.set(key, [])
+    groupMap.get(key)!.push(t)
+  }
+  const groups: TaskGroup[] = []
+  // 用户自建组放最前
+  if (groupMap.has('')) {
+    groups.push({ source: '', label: '我的代办', tasks: groupMap.get('')! })
+    groupMap.delete('')
+  }
+  // 其余按首次出现顺序
+  for (const [source, items] of groupMap) {
+    groups.push({ source, label: source, tasks: items })
+  }
+  return groups
+})
+
+/** 已折叠的分组来源集合 */
+const collapsedGroups = ref<Set<string>>(new Set())
+
+/**
+ * 切换某个分组的折叠/展开状态
+ * @param source - 分组来源标识
+ */
+function toggleGroup(source: string): void {
+  const next = new Set(collapsedGroups.value)
+  if (next.has(source)) {
+    next.delete(source)
+  } else {
+    next.add(source)
+  }
+  collapsedGroups.value = next
+}
+
+/**
+ * 判断某个分组是否已折叠
+ * @param source - 分组来源标识
+ * @returns true = 已折叠
+ */
+function isGroupCollapsed(source: string): boolean {
+  return collapsedGroups.value.has(source)
+}
+
 /** 清单视图：月份统计 */
 const monthStats = computed(() => ({
   done: monthlyTaskStore.monthDoneCount,
@@ -741,18 +803,30 @@ watch(
           <button v-if="!isCurrentMonth" class="month-today-btn" @click="goThisMonth">本月</button>
         </div>
 
-        <!-- 月度任务列表（点击空白创建） -->
+        <!-- 月度任务列表（点击空白创建，按来源分组折叠） -->
         <div class="month-tasks" @click="startEditMonth">
-          <div
-            v-for="task in monthTasks"
-            :key="task.id"
-            class="todo-item"
-            :class="{ completed: task.done }"
-            @click.stop
-          >
-            <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
-            <span class="todo-text">{{ task.text }}</span>
-            <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
+          <!-- 按来源分组渲染 -->
+          <div v-for="group in groupedMonthTasks" :key="group.source" class="task-group">
+            <!-- 分组标题（可点击折叠） -->
+            <div class="group-header" @click.stop="toggleGroup(group.source)">
+              <span class="group-arrow" :class="{ collapsed: isGroupCollapsed(group.source) }">▶</span>
+              <span class="group-label">{{ group.label }}</span>
+              <span class="group-count">{{ group.tasks.filter(t => t.done).length }}/{{ group.tasks.length }}</span>
+            </div>
+            <!-- 组内任务（折叠时隐藏） -->
+            <div v-show="!isGroupCollapsed(group.source)" class="group-tasks">
+              <div
+                v-for="task in group.tasks"
+                :key="task.id"
+                class="todo-item"
+                :class="{ completed: task.done }"
+                @click.stop
+              >
+                <button class="todo-dot" :class="{ filled: task.done }" @click="handleToggleMonthTask(task.id)"></button>
+                <span class="todo-text">{{ task.text }}</span>
+                <button class="delete-btn" @click="handleDeleteMonthTask(task.id)">✕</button>
+              </div>
+            </div>
           </div>
 
           <!-- 正在创建的新月度任务 -->
@@ -867,17 +941,29 @@ watch(
           <!-- 抽屉统计 -->
           <div class="drawer-stats">已完成 {{ monthStats.done }}/{{ monthStats.total }}</div>
 
-          <!-- 抽屉任务列表 -->
+          <!-- 抽屉任务列表（按来源分组折叠） -->
           <div class="drawer-tasks" @click="startEditMonth">
-            <div
-              v-for="task in monthTasks"
-              :key="task.id"
-              class="todo-item"
-              :class="{ completed: task.done }"
-              @click.stop
-            >
-              <button class="todo-dot" :class="{ filled: task.done }" @click="handleAddMonthTaskToToday(task)"></button>
-              <span class="todo-text" @click="handleAddMonthTaskToToday(task)">{{ task.text }}</span>
+            <!-- 按来源分组渲染 -->
+            <div v-for="group in groupedMonthTasks" :key="group.source" class="task-group">
+              <!-- 分组标题（可点击折叠） -->
+              <div class="group-header" @click.stop="toggleGroup(group.source)">
+                <span class="group-arrow" :class="{ collapsed: isGroupCollapsed(group.source) }">▶</span>
+                <span class="group-label">{{ group.label }}</span>
+                <span class="group-count">{{ group.tasks.filter(t => t.done).length }}/{{ group.tasks.length }}</span>
+              </div>
+              <!-- 组内任务（折叠时隐藏） -->
+              <div v-show="!isGroupCollapsed(group.source)" class="group-tasks">
+                <div
+                  v-for="task in group.tasks"
+                  :key="task.id"
+                  class="todo-item"
+                  :class="{ completed: task.done }"
+                  @click.stop
+                >
+                  <button class="todo-dot" :class="{ filled: task.done }" @click="handleAddMonthTaskToToday(task)"></button>
+                  <span class="todo-text" @click="handleAddMonthTaskToToday(task)">{{ task.text }}</span>
+                </div>
+              </div>
             </div>
 
             <div v-if="isEditingMonth()" class="todo-item editing" @click.stop>
@@ -1575,6 +1661,54 @@ watch(
 .month-tasks {
   padding: 4px 20px;
   cursor: text;
+}
+
+/* ========== 任务分组折叠 ========== */
+.task-group {
+  margin-bottom: 8px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  transition: background 0.2s;
+}
+
+.group-header:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.group-arrow {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.group-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.group-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex: 1;
+}
+
+.group-count {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.group-tasks {
+  padding-left: 14px;
 }
 
 /* ========== 习惯视图：打卡/理财/减重 ========== */

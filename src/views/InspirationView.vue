@@ -136,15 +136,16 @@ async function handleDeleteItem(item: InspirationItem): Promise<void> {
 /**
  * 将单条灵感加入月度清单（二次确认）
  * @param item - 灵感条目
+ * @param module - 所属灵感模块（用于记录来源）
  */
-async function handleAddItemToMonth(item: InspirationItem): Promise<void> {
+async function handleAddItemToMonth(item: InspirationItem, module: InspirationModule): Promise<void> {
   const ok = await confirmStore.confirm({
     title: '加入月度清单',
     message: `是否将「${item.text}」加入本月清单？`,
     danger: false,
   })
   if (!ok) return
-  monthlyTaskStore.addTask(item.text)
+  monthlyTaskStore.addTask(item.text, undefined, module.name)
   showToast(`已加入月度清单：${item.text}`)
 }
 
@@ -164,7 +165,7 @@ async function handleAddModuleToMonth(module: InspirationModule): Promise<void> 
     danger: false,
   })
   if (!ok) return
-  items.forEach(i => monthlyTaskStore.addTask(i.text))
+  items.forEach(i => monthlyTaskStore.addTask(i.text, undefined, module.name))
   showToast(`已批量加入 ${items.length} 条到月度清单`)
 }
 
@@ -251,7 +252,7 @@ function showToast(text: string): void {
             <div class="item-actions">
               <button
                 class="item-add"
-                @click="handleAddItemToMonth(item)"
+                @click="handleAddItemToMonth(item, module)"
                 title="加入月清单"
               >+ 加入</button>
               <button
@@ -417,6 +418,8 @@ function showToast(text: string): void {
   border: 1px solid var(--color-border-divider);
   border-radius: 10px;
   overflow: hidden;
+  /* flex 子元素不收缩，保证内容撑开后由父容器滚动 */
+  flex-shrink: 0;
 }
 
 .module-header {

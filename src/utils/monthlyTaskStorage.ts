@@ -37,15 +37,19 @@ export function saveMonthlyTasks(tasks: MonthlyTask[]): void {
  * 创建新月度任务
  * @param text - 任务文本
  * @param month - 所属月份键 'YYYY-MM'
+ * @param source - 来源标识（灵感模块名，用户自建任务不传）
  * @returns 新创建的任务对象
  */
-export function createMonthlyTask(text: string, month: string): MonthlyTask {
+export function createMonthlyTask(text: string, month: string, source?: string): MonthlyTask {
   const task: MonthlyTask = {
     id: generateId(),
     text,
     done: false,
     month,
     createdAt: Date.now(),
+  }
+  if (source) {
+    task.source = source
   }
   const tasks = getMonthlyTasks()
   tasks.push(task)

@@ -31,10 +31,11 @@ export const useMonthlyTaskStore = defineStore('monthlyTask', () => {
    * 添加月度任务（关联到当前月份）
    * @param text - 任务文本
    * @param month - 月份键（可选，默认当前月）
+   * @param source - 来源标识（灵感模块名，用户自建任务不传）
    */
-  function addTask(text: string, month?: string): void {
+  function addTask(text: string, month?: string, source?: string): void {
     const targetMonth = month || currentMonth.value
-    storageCreate(text, targetMonth)
+    storageCreate(text, targetMonth, source)
     loadTasks()
   }
 

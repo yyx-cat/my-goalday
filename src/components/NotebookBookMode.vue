@@ -188,6 +188,7 @@ function getDateOfSingle(sp: SinglePage | null | undefined): string {
 
 /**
  * 桌面/手机通用的"设置当前页"：双页对 index → 各端对应的 index 状态
+ * 桌面端需同步 visualIndex，否则渲染层 visualPage 不会刷新
  * @param pairIdx - 双页对 index（bookPages 的 index）
  */
 function setPairIndex(pairIdx: number): void {
@@ -195,6 +196,7 @@ function setPairIndex(pairIdx: number): void {
     singleIndex.value = pairIdx * 2
   } else {
     currentIndex.value = pairIdx
+    visualIndex.value = pairIdx
   }
 }
 
